@@ -225,16 +225,37 @@ app.get("/logout",(req,res)=>{req.session.destroy();res.redirect("/");});
 // ===================
 // DASHBOARD
 // ===================
+// ===================
+// DASHBOARD LIMPO SEM GRÁFICOS
+// ===================
 app.get("/dashboard", auth, (req,res)=>{
     db.all("SELECT * FROM clientes",[],(err,clientes)=>{
-        db.all("SELECT * FROM equipamentos",[],(err2,equipamentos)=>{
-            res.send(layout("Dashboard",`
-                <h3>Dashboard</h3>
-                <div class="row">
-                    <div class="col-md-4"><div class="card bg-primary text-white">Clientes <h2>${clientes.length}</h2></div></div>
-                    <div class="col-md-4"><div class="card bg-success text-white">Equipamentos <h2>${equipamentos.length}</h2></div></div>
-                </div>
-            `));
+        db.all("SELECT * FROM filiais",[],(err2,filiais)=>{
+            db.all("SELECT * FROM equipamentos",[],(err3,equipamentos)=>{
+
+                res.send(layout("Dashboard",`
+                    <style>
+                        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: #f0f2f5; color: #333; min-height:100vh; padding-bottom:50px; }
+                        .card { background-color: #fff; color: #333; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
+                        .card h3 { margin:0; font-size:1.2rem; }
+                        .card span { font-size:1.5rem; font-weight:bold; }
+                        .btn-report { background: linear-gradient(90deg,#ff7e5f,#feb47b); border:none; color:white; font-weight:bold; padding:10px 20px; border-radius:8px; text-decoration:none; }
+                        .btn-report:hover { opacity:0.9; }
+                        .stats-container { display:flex; gap:20px; flex-wrap:wrap; justify-content:center; margin-bottom:30px; }
+                    </style>
+
+                    <h2 style="text-align:center; margin-bottom:30px;">Dashboard</h2>
+                    <div class="stats-container">
+                        <div class="card" style="width:200px; text-align:center;"><h3>Clientes</h3><span>${clientes.length}</span></div>
+                        <div class="card" style="width:200px; text-align:center;"><h3>Filiais</h3><span>${filiais.length}</span></div>
+                        <div class="card" style="width:200px; text-align:center;"><h3>Equipamentos</h3><span>${equipamentos.length}</span></div>
+                    </div>
+
+                    <div style="text-align:center; margin-bottom:50px;">
+                        <a href="/relatorio" class="btn-report"><i class="fas fa-print"></i> Gerar Relatórios</a>
+                    </div>
+                `));
+            });
         });
     });
 });
@@ -485,54 +506,142 @@ app.get("/equipamentos/excluir/:id", auth, (req,res)=>{
 });
 
 // ===================
-// RELATÓRIO
+// RELATÓRIOS
 // ===================
+app.get("/relatorio", auth, (req, res) => {
+    // Pega clientes e filiais para filtros
+    db.all("SELECT * FROM clientes", [], (err, clientes) => {
+        db.all("SELECT f.id, f.nome, c.nome as cliente_nome FROM filiais f LEFT JOIN clientes c ON f.cliente_id=c.id", [], (err2, filiais) => {
+            res.send(layout("Relatório", `
+                <div class="card">
+                    <h3>Filtrar Relatório</h3>
+                    <form method="GET" id="filtroForm">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <select name="cliente_id" class="form-control mb-2">
+                                    <option value="">Todos os Clientes</option>
+                                    ${clientes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <select name="filial_id" class="form-control mb-2">
+                                    <option value="">Todas as Filiais</option>
+                                    ${filiais.map(f => `<option value="${f.id}">${f.cliente_nome} - ${f.nome}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <button class="btn btn-primary mb-2">Filtrar</button>
+                                <button type="button" id="imprimirBtn" class="btn btn-warning mb-2">Imprimir</button>
+                                <button type="button" id="pdfBtn" class="btn btn-success mb-2">Salvar PDF</button>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="resultado"></div>
+                </div>
+                <script>
+                    const form = document.getElementById('filtroForm');
+                    const resultado = document.getElementById('resultado');
 
-app.get("/relatorio", auth, (req,res)=>{
-    const { filial_id } = req.query; // permite filtro por filial
-    let sql = `
-        SELECT e.*, f.nome as filial_nome, c.nome as cliente_nome
-        FROM equipamentos e
-        LEFT JOIN filiais f ON e.filial_id = f.id
-        LEFT JOIN clientes c ON f.cliente_id = c.id
-    `;
-    const params = [];
-    if(filial_id){
-        sql += " WHERE f.id = ?";
-        params.push(filial_id);
-    }
-    db.all(sql, params, (err, rows)=>{
-        // pegar todas as filiais para o select de filtro
-        db.all(`SELECT f.id as filial_id, f.nome as filial_nome, c.nome as cliente_nome 
-                FROM filiais f 
-                LEFT JOIN clientes c ON f.cliente_id = c.id`, [], (err2, filiais) => {
-            let html = `<div class="card">
-                <h3>Relatório de Equipamentos</h3>
-                <form method="GET" class="mb-3">
-                    <select name="filial_id" class="form-control mb-2">
-                        <option value="">Todas as Filiais</option>
-                        ${filiais.map(f=>`<option value="${f.filial_id}" ${filial_id==f.filial_id?'selected':''}>${f.filial_nome} - ${f.cliente_nome || '-'}</option>`).join('')}
-                    </select>
-                    <button class="btn btn-primary">Filtrar</button>
-                </form>
-                <table class="table table-bordered">
-                    <tr><th>ID</th><th>Modelo</th><th>Tipo</th><th>Marca</th><th>Filial</th><th>Cliente</th><th>Última</th><th>Próxima</th><th>Responsável</th><th>Executor</th></tr>
-                    ${rows.map(r=>`<tr>
-                        <td>${r.id}</td>
-                        <td>${r.modelo}</td>
-                        <td>${r.tipo}</td>
-                        <td>${r.marca}</td>
-                        <td>${r.filial_nome||'-'}</td>
-                        <td>${r.cliente_nome||'-'}</td>
-                        <td>${r.ultima}</td>
-                        <td>${r.proxima}</td>
-                        <td>${r.responsavel}</td>
-                        <td>${r.executor}</td>
-                    </tr>`).join('')}
-                </table>
-            </div>`;
-            res.send(layout("Relatório", html));
+                    async function carregarRelatorio() {
+                        const params = new URLSearchParams(new FormData(form));
+                        const res = await fetch('/relatorio/dados?' + params.toString());
+                        const html = await res.text();
+                        resultado.innerHTML = html;
+                    }
+
+                    form.addEventListener('submit', e => { e.preventDefault(); carregarRelatorio(); });
+                    window.onload = carregarRelatorio;
+
+                    document.getElementById('imprimirBtn').addEventListener('click', () => {
+                        const conteudo = document.getElementById('resultado').innerHTML;
+                        const win = window.open('', '', 'width=800,height=600');
+                        win.document.write(conteudo);
+                        win.print();
+                        win.close();
+                    });
+
+                    document.getElementById('pdfBtn').addEventListener('click', async () => {
+                        const params = new URLSearchParams(new FormData(form));
+                        const res = await fetch('/relatorio/pdf?' + params.toString());
+                        const blob = await res.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'relatorio.pdf';
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                    });
+                </script>
+            `));
         });
+    });
+});
+
+// ===================
+// Dados do relatório filtrado
+// ===================
+app.get("/relatorio/dados", auth, (req, res) => {
+    let sql = `SELECT e.*, f.nome as filial_nome, c.nome as cliente_nome
+               FROM equipamentos e
+               LEFT JOIN filiais f ON e.filial_id=f.id
+               LEFT JOIN clientes c ON f.cliente_id=c.id WHERE 1=1`;
+    const params = [];
+    if (req.query.cliente_id) { sql += " AND c.id=?"; params.push(req.query.cliente_id); }
+    if (req.query.filial_id) { sql += " AND f.id=?"; params.push(req.query.filial_id); }
+
+    db.all(sql, params, (err, rows) => {
+        if (err) return res.send("Erro ao gerar relatório");
+        let html = `<table class="table table-bordered">
+                        <tr>
+                            <th>ID</th><th>Modelo</th><th>Tipo</th><th>Marca</th>
+                            <th>Filial</th><th>Cliente</th><th>Responsável</th><th>Executor</th>
+                            <th>Última</th><th>Próxima</th>
+                        </tr>
+                        ${rows.map(r => `<tr>
+                            <td>${r.id}</td><td>${r.modelo}</td><td>${r.tipo}</td><td>${r.marca}</td>
+                            <td>${r.filial_nome||'-'}</td><td>${r.cliente_nome||'-'}</td>
+                            <td>${r.responsavel||'-'}</td><td>${r.executor||'-'}</td>
+                            <td>${r.ultima||'-'}</td><td>${r.proxima||'-'}</td>
+                        </tr>`).join('')}
+                    </table>`;
+        res.send(html);
+    });
+});
+
+// ===================
+// Gerar PDF
+// ===================
+const PDFDocument = require('pdfkit');
+app.get("/relatorio/pdf", auth, (req, res) => {
+    let sql = `SELECT e.*, f.nome as filial_nome, c.nome as cliente_nome
+               FROM equipamentos e
+               LEFT JOIN filiais f ON e.filial_id=f.id
+               LEFT JOIN clientes c ON f.cliente_id=c.id WHERE 1=1`;
+    const params = [];
+    if (req.query.cliente_id) { sql += " AND c.id=?"; params.push(req.query.cliente_id); }
+    if (req.query.filial_id) { sql += " AND f.id=?"; params.push(req.query.filial_id); }
+
+    db.all(sql, params, (err, rows) => {
+        if (err) return res.send("Erro ao gerar PDF");
+
+        const doc = new PDFDocument({ margin: 30, size: 'A4' });
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'attachment; filename=relatorio.pdf');
+        doc.pipe(res);
+
+        doc.fontSize(16).text('Relatório de Equipamentos', { align: 'center' });
+        doc.moveDown();
+
+        rows.forEach(r => {
+            doc.fontSize(12)
+                .text(`ID: ${r.id} | Modelo: ${r.modelo} | Tipo: ${r.tipo} | Marca: ${r.marca}`)
+                .text(`Filial: ${r.filial_nome||'-'} | Cliente: ${r.cliente_nome||'-'}`)
+                .text(`Responsável: ${r.responsavel||'-'} | Executor: ${r.executor||'-'}`)
+                .text(`Última: ${r.ultima||'-'} | Próxima: ${r.proxima||'-'}`)
+                .moveDown();
+        });
+
+        doc.end();
     });
 });
 // ===================
