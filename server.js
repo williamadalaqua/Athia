@@ -6,6 +6,7 @@ const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
 
+
 const app = express();
 const PORT = 7500;
 
@@ -19,7 +20,10 @@ if (!fs.existsSync("./public/img")) fs.mkdirSync("./public/img", { recursive: tr
 // BANCO DE DADOS
 // ===================
 const db = new sqlite3.Database("./database.db");
+
 db.serialize(() => {
+
+    // ===== USUÁRIOS =====
     db.run(`CREATE TABLE IF NOT EXISTS usuarios(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT UNIQUE,
@@ -27,15 +31,20 @@ db.serialize(() => {
     )`);
     db.run(`INSERT OR IGNORE INTO usuarios(id,email,senha) VALUES(1,'admin@email.com','123')`);
 
+    // ===== CLIENTES =====
     db.run(`CREATE TABLE IF NOT EXISTS clientes(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT
     )`);
+
+    // ===== FILIAIS =====
     db.run(`CREATE TABLE IF NOT EXISTS filiais(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
         cliente_id INTEGER
     )`);
+
+    // ===== EQUIPAMENTOS =====
     db.run(`CREATE TABLE IF NOT EXISTS equipamentos(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         modelo TEXT,
@@ -49,8 +58,39 @@ db.serialize(() => {
         foto TEXT,
         filial_id INTEGER
     )`);
-});
 
+    // ===== CHAMADOS =====
+    db.run(`CREATE TABLE IF NOT EXISTS chamados(
+        id INTEGER PRIMARY KEY AUTOINCREMENT
+    )`);
+
+    // ===== Garantir que todas as colunas existam =====
+    db.all("PRAGMA table_info(chamados);", [], (err, cols) => {
+        if(err) return console.error("Erro ao verificar colunas de chamados:", err);
+
+        const colNames = cols.map(c => c.name);
+
+        if(!colNames.includes("filial_id")) db.run("ALTER TABLE chamados ADD COLUMN filial_id INTEGER");
+        if(!colNames.includes("equipamento_id")) db.run("ALTER TABLE chamados ADD COLUMN equipamento_id INTEGER");
+        if(!colNames.includes("ambiente")) db.run("ALTER TABLE chamados ADD COLUMN ambiente TEXT");
+        if(!colNames.includes("tipo_defeito")) db.run("ALTER TABLE chamados ADD COLUMN tipo_defeito TEXT");
+        if(!colNames.includes("data_hora_chamado")) db.run("ALTER TABLE chamados ADD COLUMN data_hora_chamado TEXT");
+        if(!colNames.includes("descricao")) db.run("ALTER TABLE chamados ADD COLUMN descricao TEXT");
+        if(!colNames.includes("data_hora_resolucao")) db.run("ALTER TABLE chamados ADD COLUMN data_hora_resolucao TEXT");
+    });
+
+    // ===== TABELA DE HISTORICO DE MANUTENCAO=======
+    db.run(`CREATE TABLE IF NOT EXISTS manutencoes(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    equipamento_id INTEGER,
+    data TEXT,
+    tipo TEXT,
+    descricao TEXT,
+    responsavel TEXT,
+    executor TEXT
+)`);
+
+});
 // ===================
 // MIDDLEWARE
 // ===================
@@ -133,9 +173,18 @@ function layout(titulo, conteudo) {
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="/equipamentos">Todos os Equipamentos</a></li>
                             <li><a class="dropdown-item" href="/equipamentos/novo">Novo Equipamento</a></li>
+                            <li class="nav-item"><a class="nav-link btn btn-warning btn-sm mx-1" href="/relatorio">Relatório</a></li>
                         </ul>
                     </li>
-                    <li class="nav-item"><a class="nav-link btn btn-warning btn-sm mx-1" href="/relatorio">Relatório</a></li>
+                    <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle btn btn-info btn-sm mx-1" href="#" role="button" data-bs-toggle="dropdown">Chamados</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="/chamados">Abrir Chamados</a></li>
+                        <li><a class="dropdown-item" href="/relatorio-chamados">Relatório de Chamados</a></li>
+                    </ul>
+                </li>
+                    
+                    
                 </ul>
                 <a href="/logout" class="btn btn-danger btn-sm">Sair</a>` : ""}
             </div>
@@ -225,9 +274,7 @@ app.get("/logout",(req,res)=>{req.session.destroy();res.redirect("/");});
 // ===================
 // DASHBOARD
 // ===================
-// ===================
-// DASHBOARD LIMPO SEM GRÁFICOS
-// ===================
+
 app.get("/dashboard", auth, (req,res)=>{
     db.all("SELECT * FROM clientes",[],(err,clientes)=>{
         db.all("SELECT * FROM filiais",[],(err2,filiais)=>{
@@ -249,6 +296,7 @@ app.get("/dashboard", auth, (req,res)=>{
                         <div class="card" style="width:200px; text-align:center;"><h3>Clientes</h3><span>${clientes.length}</span></div>
                         <div class="card" style="width:200px; text-align:center;"><h3>Filiais</h3><span>${filiais.length}</span></div>
                         <div class="card" style="width:200px; text-align:center;"><h3>Equipamentos</h3><span>${equipamentos.length}</span></div>
+                        
                     </div>
 
                     <div style="text-align:center; margin-bottom:50px;">
@@ -260,46 +308,73 @@ app.get("/dashboard", auth, (req,res)=>{
     });
 });
 
+
 // ===================
-// CLIENTES CRUD
+// CLIENTES CRUD (atualizado)
 // ===================
 app.get("/clientes", auth, (req,res)=>{
-    db.all("SELECT * FROM clientes",[],(err,rows)=>{
-        let html = `
-        <div class="card">
-            <h3>Clientes</h3>
-            <a href="/clientes/novo" class="btn btn-success mb-2">Novo Cliente</a>
-            <table class="table table-bordered">
-                <tr><th>ID</th><th>Nome</th><th>Ações</th></tr>
-                ${rows.map(r=>`<tr>
-                    <td>${r.id}</td>
-                    <td>${r.nome}</td>
-                    <td>
-                        <a href="/clientes/editar/${r.id}" class="btn btn-sm btn-primary">Editar</a>
-                        <a href="/clientes/excluir/${r.id}" class="btn btn-sm btn-danger">Excluir</a>
-                    </td>
-                </tr>`).join('')}
-            </table>
-        </div>`;
-        res.send(layout("Clientes",html));
-    });
+    res.redirect("/clientes/novo");
 });
 
 app.get("/clientes/novo", auth, (req,res)=>{
     res.send(layout("Novo Cliente",`
         <div class="card">
             <h3>Novo Cliente</h3>
-            <form method="POST">
+            <form id="clienteForm">
                 <input name="nome" class="form-control mb-2" placeholder="Nome" required>
                 <button class="btn btn-success">Salvar</button>
             </form>
         </div>
+
+        <div class="card mt-4">
+            <h3>Clientes Cadastrados</h3>
+            <table class="table table-bordered" id="clientesTable">
+                <tr><th>ID</th><th>Nome</th><th>Ações</th></tr>
+            </table>
+        </div>
+
+        <script>
+        async function carregarClientes() {
+            const res = await fetch('/clientes/lista');
+            const html = await res.text();
+            document.getElementById('clientesTable').innerHTML = html;
+        }
+
+        document.getElementById('clienteForm').addEventListener('submit', async e => {
+            e.preventDefault();
+            const data = new URLSearchParams(new FormData(e.target));
+            const res = await fetch('/clientes/novo', { method: 'POST', body: data });
+            if(res.ok) {
+                e.target.reset();
+                carregarClientes();
+            }
+        });
+
+        window.onload = carregarClientes;
+        </script>
     `));
 });
 
+// Inserir cliente via POST
 app.post("/clientes/novo", auth, (req,res)=>{
     const { nome } = req.body;
-    db.run("INSERT INTO clientes(nome) VALUES(?)",[nome],()=>res.redirect("/clientes"));
+    db.run("INSERT INTO clientes(nome) VALUES(?)",[nome],()=>res.sendStatus(200));
+});
+
+// Listar clientes para a tabela dinâmica
+app.get("/clientes/lista", auth, (req,res)=>{
+    db.all("SELECT * FROM clientes", [], (err, rows)=>{
+        const html = rows.map(r=>`
+            <tr>
+                <td>${r.id}</td>
+                <td>${r.nome}</td>
+                <td>
+                    <a href="/clientes/editar/${r.id}" class="btn btn-sm btn-primary">Editar</a>
+                    <a href="/clientes/excluir/${r.id}" class="btn btn-sm btn-danger">Excluir</a>
+                </td>
+            </tr>`).join('');
+        res.send(html);
+    });
 });
 
 app.get("/clientes/editar/:id", auth, (req,res)=>{
@@ -317,12 +392,137 @@ app.get("/clientes/editar/:id", auth, (req,res)=>{
 });
 
 app.post("/clientes/editar/:id", auth, (req,res)=>{
-    db.run("UPDATE clientes SET nome=? WHERE id=?",[req.body.nome,req.params.id],()=>res.redirect("/clientes"));
+    db.run("UPDATE clientes SET nome=? WHERE id=?",[req.body.nome,req.params.id],()=>res.redirect("/clientes/novo"));
 });
 
 app.get("/clientes/excluir/:id", auth, (req,res)=>{
-    db.run("DELETE FROM clientes WHERE id=?",[req.params.id],()=>res.redirect("/clientes"));
+    db.run("DELETE FROM clientes WHERE id=?",[req.params.id],()=>res.redirect("/clientes/novo"));
 });
+
+
+// ===================
+// RELATÓRIO (sem clientes)
+// ===================
+app.get("/relatorio", auth, (req, res) => {
+    db.all("SELECT * FROM filiais", [], (err, filiais) => {
+        res.send(layout("Relatório", `
+            <div class="card">
+                <h3>Filtrar Relatório</h3>
+                <form method="GET" id="filtroForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <select name="filial_id" class="form-control mb-2">
+                                <option value="">Todas as Filiais</option>
+                                ${filiais.map(f => `<option value="${f.id}">${f.nome}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <button class="btn btn-primary mb-2">Filtrar</button>
+                            <button type="button" id="imprimirBtn" class="btn btn-warning mb-2">Imprimir</button>
+                            
+                        </div>
+                    </div>
+                </form>
+                <div id="resultado"></div>
+            </div>
+
+            <script>
+                const form = document.getElementById('filtroForm');
+                const resultado = document.getElementById('resultado');
+
+                async function carregarRelatorio() {
+                    const params = new URLSearchParams(new FormData(form));
+                    const res = await fetch('/relatorio/dados?' + params.toString());
+                    const html = await res.text();
+                    resultado.innerHTML = html;
+                }
+
+                form.addEventListener('submit', e => { e.preventDefault(); carregarRelatorio(); });
+                window.onload = carregarRelatorio;
+
+                document.getElementById('imprimirBtn').addEventListener('click', () => {
+                    const conteudo = document.getElementById('resultado').innerHTML;
+                    const win = window.open('', '', 'width=800,height=600');
+                    win.document.write(conteudo);
+                    win.print();
+                    win.close();
+                });
+
+                
+            </script>
+        `));
+    });
+});
+
+// ===================
+// RELATÓRIO DE CHAMADOS COM AVISO DE MANUTENÇÃO
+// ===================
+app.get("/chamados/relatorio", auth, (req, res) => {
+    let sql = `
+        SELECT ch.*, f.nome as filial_nome, e.modelo as equipamento_modelo, e.proxima as proxima_manutencao
+        FROM chamados ch
+        LEFT JOIN filiais f ON ch.filial_id=f.id
+        LEFT JOIN equipamentos e ON ch.equipamento_id=e.id
+        ORDER BY ch.data_hora_chamado DESC
+    `;
+
+    db.all(sql, [], (err, rows) => {
+        if (err) return res.send("Erro ao gerar relatório de chamados: " + err.message);
+
+        const hoje = new Date();
+        let html = `
+        <div class="card">
+            <h3 class="card-header">Relatório de Chamados</h3>
+            <div class="card-body">
+            <table class="table table-bordered table-striped">
+                <thead>
+                    <tr>
+                        <th>ID</th><th>Filial</th><th>Equipamento</th><th>Ambiente</th>
+                        <th>Tipo de Defeito</th><th>Data/Hora Chamado</th><th>Descrição/Resolução</th>
+                        <th>Próxima Manutenção</th><th>Aviso</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        rows.forEach(r => {
+            let aviso = '';
+            if (r.proxima_manutencao) {
+                const proxManut = new Date(r.proxima_manutencao);
+                const diffTime = proxManut - hoje;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                if (diffDays <= 30 && diffDays >= 0) {
+                    aviso = `<span class="badge bg-danger">Vence em ${diffDays} dias!</span>`;
+                } else if (diffDays < 0) {
+                    aviso = `<span class="badge bg-secondary">Atrasado!</span>`;
+                }
+            }
+
+            html += `<tr>
+                <td>${r.id}</td>
+                <td>${r.filial_nome || '-'}</td>
+                <td>${r.equipamento_modelo || '-'}</td>
+                <td>${r.ambiente || '-'}</td>
+                <td>${r.tipo_defeito || '-'}</td>
+                <td>${r.data_hora_chamado || '-'}</td>
+                <td>${r.descricao || '-'}</td>
+                <td>${r.proxima_manutencao || '-'}</td>
+                <td>${aviso}</td>
+            </tr>`;
+        });
+
+        html += `
+                </tbody>
+            </table>
+            </div>
+        </div>
+        `;
+        res.send(layout("Relatório de Chamados", html));
+    });
+});
+
+
 
 // ===================
 // FILIAIS CRUD
@@ -424,6 +624,8 @@ app.get("/equipamentos", auth, (req,res)=>{
                     <td>
                         <a href="/equipamentos/editar/${r.id}" class="btn btn-sm btn-primary">Editar</a>
                         <a href="/equipamentos/excluir/${r.id}" class="btn btn-sm btn-danger">Excluir</a>
+                        <a href="/equipamentos/manutencao/${r.id}" class="btn btn-sm btn-warning">Manutenção</a>
+                        <a href="/equipamentos/historico/${r.id}" class="btn btn-sm btn-info">Histórico</a>
                     </td>
                 </tr>`).join('')}
             </table>
@@ -460,10 +662,38 @@ app.get("/equipamentos/novo", auth, (req,res)=>{
 });
 
 app.post("/equipamentos/novo", auth, upload.single("foto"), (req,res)=>{
+
+    console.log("🔥 POST /equipamentos/novo");
+
+    console.log("BODY:", req.body);
+    console.log("FILE:", req.file);
+
     const { modelo,tipo,marca,potencia,ultima,proxima,responsavel,executor,filial_id } = req.body;
+
+    // validação obrigatória
+    if(!modelo || !tipo || !marca || !filial_id){
+        return res.send("❌ Campos obrigatórios faltando");
+    }
+
     const foto = req.file ? req.file.filename : null;
-    db.run(`INSERT INTO equipamentos(modelo,tipo,marca,potencia,ultima,proxima,responsavel,executor,filial_id,foto)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?)`,[modelo,tipo,marca,potencia,ultima,proxima,responsavel,executor,filial_id,foto],()=>res.redirect("/equipamentos"));
+
+    db.run(`
+        INSERT INTO equipamentos
+        (modelo,tipo,marca,potencia,ultima,proxima,responsavel,executor,filial_id,foto)
+        VALUES(?,?,?,?,?,?,?,?,?,?)
+    `,
+    [modelo,tipo,marca,potencia,ultima,proxima,responsavel,executor,filial_id,foto],
+    function(err){
+
+        if(err){
+            console.log("❌ ERRO SQLITE:", err.message);
+            return res.send("Erro ao salvar: " + err.message);
+        }
+
+        console.log("✅ SALVO ID:", this.lastID);
+
+        res.redirect("/equipamentos");
+    });
 });
 
 app.get("/equipamentos/editar/:id", auth, (req,res)=>{
@@ -505,77 +735,141 @@ app.get("/equipamentos/excluir/:id", auth, (req,res)=>{
     db.run("DELETE FROM equipamentos WHERE id=?",[req.params.id],()=>res.redirect("/equipamentos"));
 });
 
+/// ===================
+// CHAMADOS CRUD
 // ===================
-// RELATÓRIOS
-// ===================
-app.get("/relatorio", auth, (req, res) => {
-    // Pega clientes e filiais para filtros
-    db.all("SELECT * FROM clientes", [], (err, clientes) => {
-        db.all("SELECT f.id, f.nome, c.nome as cliente_nome FROM filiais f LEFT JOIN clientes c ON f.cliente_id=c.id", [], (err2, filiais) => {
-            res.send(layout("Relatório", `
+
+app.get("/chamados", auth, (req, res) => {
+    db.all(`
+        SELECT ch.*, f.nome as filial_nome, e.modelo as equipamento_modelo
+        FROM chamados ch
+        LEFT JOIN filiais f ON ch.filial_id=f.id
+        LEFT JOIN equipamentos e ON ch.equipamento_id=e.id
+        ORDER BY ch.data_hora_chamado DESC
+    `, [], (err, rows) => {
+        if(err) return res.send("Erro ao carregar chamados: " + err.message);
+        let html = `
+        <div class="card">
+            <h3>Chamados</h3>
+            <a href="/chamados/novo" class="btn btn-success mb-2">Novo Chamado</a>
+            <table class="table table-bordered">
+                <tr>
+                    <th>ID</th><th>Filial</th><th>Equipamento</th><th>Ambiente</th>
+                    <th>Tipo de Defeito</th><th>Data/Hora Chamado</th>
+                    <th>Descrição/Resolução</th><th>Ações</th>
+                </tr>
+                ${rows.map(r => `<tr>
+                    <td>${r.id}</td>
+                    <td>${r.filial_nome||'-'}</td>
+                    <td>${r.equipamento_modelo||'-'}</td>
+                    <td>${r.ambiente||'-'}</td>
+                    <td>${r.tipo_defeito||'-'}</td>
+                    <td>${r.data_hora_chamado||'-'}</td>
+                    <td>${r.descricao||'-'}<br>${r.data_hora_resolucao||''}</td>
+                    <td>
+                        <a href="/chamados/editar/${r.id}" class="btn btn-sm btn-primary">Editar</a>
+                        <a href="/chamados/excluir/${r.id}" class="btn btn-sm btn-danger">Excluir</a>
+                    </td>
+                </tr>`).join('')}
+            </table>
+        </div>`;
+        res.send(layout("Chamados", html));
+    });
+});
+
+// Formulário para criar novo chamado
+app.get("/chamados/novo", auth, (req, res) => {
+    db.all("SELECT * FROM filiais", [], (err, filiais) => {
+        if(err) return res.send("Erro ao carregar filiais: " + err.message);
+
+        db.all("SELECT * FROM equipamentos", [], (err2, equipamentos) => {
+            if(err2) return res.send("Erro ao carregar equipamentos: " + err2.message);
+
+            res.send(layout("Novo Chamado", `
                 <div class="card">
-                    <h3>Filtrar Relatório</h3>
-                    <form method="GET" id="filtroForm">
-                        <div class="row">
-                            <div class="col-md-4">
-                                <select name="cliente_id" class="form-control mb-2">
-                                    <option value="">Todos os Clientes</option>
-                                    ${clientes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <select name="filial_id" class="form-control mb-2">
-                                    <option value="">Todas as Filiais</option>
-                                    ${filiais.map(f => `<option value="${f.id}">${f.cliente_nome} - ${f.nome}</option>`).join('')}
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <button class="btn btn-primary mb-2">Filtrar</button>
-                                <button type="button" id="imprimirBtn" class="btn btn-warning mb-2">Imprimir</button>
-                                <button type="button" id="pdfBtn" class="btn btn-success mb-2">Salvar PDF</button>
-                            </div>
-                        </div>
+                    <h3>Novo Chamado</h3>
+                    <form method="POST">
+                        <select name="filial_id" class="form-control mb-2" required>
+                            <option value="">Selecione a filial</option>
+                            ${filiais.map(f => `<option value="${f.id}">${f.nome}</option>`).join('')}
+                        </select>
+                        <select name="equipamento_id" class="form-control mb-2" required>
+                            <option value="">Selecione o equipamento</option>
+                            ${equipamentos.map(e => `<option value="${e.id}">${e.modelo}</option>`).join('')}
+                        </select>
+                        <input name="ambiente" class="form-control mb-2" placeholder="Ambiente" required>
+                        <input name="tipo_defeito" class="form-control mb-2" placeholder="Tipo de Defeito" required>
+                        <button class="btn btn-success">Salvar</button>
                     </form>
-                    <div id="resultado"></div>
                 </div>
-                <script>
-                    const form = document.getElementById('filtroForm');
-                    const resultado = document.getElementById('resultado');
-
-                    async function carregarRelatorio() {
-                        const params = new URLSearchParams(new FormData(form));
-                        const res = await fetch('/relatorio/dados?' + params.toString());
-                        const html = await res.text();
-                        resultado.innerHTML = html;
-                    }
-
-                    form.addEventListener('submit', e => { e.preventDefault(); carregarRelatorio(); });
-                    window.onload = carregarRelatorio;
-
-                    document.getElementById('imprimirBtn').addEventListener('click', () => {
-                        const conteudo = document.getElementById('resultado').innerHTML;
-                        const win = window.open('', '', 'width=800,height=600');
-                        win.document.write(conteudo);
-                        win.print();
-                        win.close();
-                    });
-
-                    document.getElementById('pdfBtn').addEventListener('click', async () => {
-                        const params = new URLSearchParams(new FormData(form));
-                        const res = await fetch('/relatorio/pdf?' + params.toString());
-                        const blob = await res.blob();
-                        const url = window.URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = 'relatorio.pdf';
-                        a.click();
-                        window.URL.revokeObjectURL(url);
-                    });
-                </script>
             `));
         });
     });
 });
+
+// Criar novo chamado
+app.post("/chamados/novo", auth, (req, res) => {
+    const { filial_id, equipamento_id, ambiente, tipo_defeito } = req.body;
+    const data_hora_chamado = new Date().toLocaleString();
+    db.run(`INSERT INTO chamados(filial_id,equipamento_id,ambiente,tipo_defeito,data_hora_chamado)
+            VALUES(?,?,?,?,?)`,
+        [filial_id, equipamento_id, ambiente, tipo_defeito, data_hora_chamado],
+        function(err){
+            if(err) return res.send("Erro ao salvar chamado: " + err.message);
+            res.redirect("/chamados");
+        });
+});
+
+// Formulário para editar chamado
+app.get("/chamados/editar/:id", auth, (req, res) => {
+    db.get("SELECT * FROM chamados WHERE id=?", [req.params.id], (err, chamado) => {
+        if(err || !chamado) return res.send("Chamado não encontrado.");
+
+        db.all("SELECT * FROM filiais", [], (err2, filiais) => {
+            db.all("SELECT * FROM equipamentos", [], (err3, equipamentos) => {
+                res.send(layout("Editar Chamado", `
+                    <div class="card">
+                        <h3>Editar Chamado</h3>
+                        <form method="POST">
+                            <select name="filial_id" class="form-control mb-2" required>
+                                ${filiais.map(f => `<option value="${f.id}" ${f.id===chamado.filial_id?'selected':''}>${f.nome}</option>`).join('')}
+                            </select>
+                            <select name="equipamento_id" class="form-control mb-2" required>
+                                ${equipamentos.map(e => `<option value="${e.id}" ${e.id===chamado.equipamento_id?'selected':''}>${e.modelo}</option>`).join('')}
+                            </select>
+                            <input name="ambiente" class="form-control mb-2" value="${chamado.ambiente}" required>
+                            <input name="tipo_defeito" class="form-control mb-2" value="${chamado.tipo_defeito}" required>
+                            <textarea name="descricao" class="form-control mb-2" placeholder="Descrição/Resolução">${chamado.descricao||''}</textarea>
+                            <button class="btn btn-success">Salvar</button>
+                        </form>
+                        ${chamado.data_hora_resolucao ? `<p><small>Última atualização: ${chamado.data_hora_resolucao}</small></p>` : ''}
+                    </div>
+                `));
+            });
+        });
+    });
+});
+
+// Atualizar chamado
+app.post("/chamados/editar/:id", auth, (req, res) => {
+    const { filial_id, equipamento_id, ambiente, tipo_defeito, descricao } = req.body;
+    const data_hora_resolucao = new Date().toLocaleString();
+    db.run(`UPDATE chamados SET filial_id=?, equipamento_id=?, ambiente=?, tipo_defeito=?, descricao=?, data_hora_resolucao=? WHERE id=?`,
+        [filial_id, equipamento_id, ambiente, tipo_defeito, descricao, data_hora_resolucao, req.params.id],
+        function(err){
+            if(err) return res.send("Erro ao atualizar chamado: " + err.message);
+            res.redirect("/chamados");
+        });
+});
+
+// Excluir chamado
+app.get("/chamados/excluir/:id", auth, (req, res) => {
+    db.run("DELETE FROM chamados WHERE id=?", [req.params.id], function(err){
+        if(err) return res.send("Erro ao excluir chamado: " + err.message);
+        res.redirect("/chamados");
+    });
+});
+
 
 // ===================
 // Dados do relatório filtrado
@@ -608,40 +902,281 @@ app.get("/relatorio/dados", auth, (req, res) => {
     });
 });
 
-// ===================
-// Gerar PDF
-// ===================
-const PDFDocument = require('pdfkit');
-app.get("/relatorio/pdf", auth, (req, res) => {
-    let sql = `SELECT e.*, f.nome as filial_nome, c.nome as cliente_nome
-               FROM equipamentos e
-               LEFT JOIN filiais f ON e.filial_id=f.id
-               LEFT JOIN clientes c ON f.cliente_id=c.id WHERE 1=1`;
+//======= ROTA MANUTENCAO======
+app.get("/equipamentos/manutencao/:id", auth, (req,res)=>{
+    res.send(layout("Nova Manutenção",`
+        <div class="card">
+            <h3>Registrar Manutenção</h3>
+            <form method="POST">
+                <input name="tipo" class="form-control mb-2" placeholder="Tipo (Preventiva/Corretiva)" required>
+                <textarea name="descricao" class="form-control mb-2" placeholder="O que foi feito"></textarea>
+                <input name="responsavel" class="form-control mb-2" placeholder="Responsável">
+                <input name="executor" class="form-control mb-2" placeholder="Executor">
+                <button class="btn btn-success">Salvar</button>
+            </form>
+        </div>
+    `));
+});
+
+app.post("/equipamentos/manutencao/:id", auth, (req,res)=>{
+
+    const { tipo, descricao, responsavel, executor } = req.body;
+
+    const dataAtual = new Date();
+
+    function formatDate(date){
+        return date.toISOString().split("T")[0];
+    }
+
+    const dataFormatada = dataAtual.toISOString();
+
+    const proxima = new Date(dataAtual);
+    proxima.setDate(proxima.getDate() + 30);
+
+    // 1️⃣ salva histórico
+    db.run(`
+        INSERT INTO manutencoes
+        (equipamento_id,data,tipo,descricao,responsavel,executor)
+        VALUES(?,?,?,?,?,?)
+    `,
+    [
+        req.params.id,
+        dataFormatada,
+        tipo,
+        descricao,
+        responsavel,
+        executor
+    ],
+    (err)=>{
+        if(err) return res.send(err.message);
+
+        // 2️⃣ atualiza equipamento
+        db.run(`
+            UPDATE equipamentos
+            SET ultima=?, proxima=?, 
+                responsavel=COALESCE(?,responsavel),
+                executor=COALESCE(?,executor)
+            WHERE id=?
+        `,
+        [
+            formatDate(dataAtual),
+            formatDate(proxima),
+            responsavel,
+            executor,
+            req.params.id
+        ],
+        (err2)=>{
+            if(err2) return res.send(err2.message);
+
+            res.redirect("/equipamentos");
+        });
+    });
+});
+
+
+app.get("/equipamentos/historico/:id", auth, (req,res)=>{
+
+    const equipamentoId = req.params.id;
+
+    // 🔧 MANUTENÇÕES
+    db.all(`
+        SELECT 
+            id,
+            data as data_evento,
+            tipo,
+            descricao,
+            responsavel,
+            'manutencao' as origem
+        FROM manutencoes
+        WHERE equipamento_id=?
+    `,[equipamentoId],(err, manutencoes)=>{
+
+        if(err) return res.send(err.message);
+
+        // 📞 CHAMADOS
+        db.all(`
+            SELECT 
+                id,
+                data_hora_chamado as data_evento,
+                tipo_defeito as tipo,
+                descricao,
+                ambiente as responsavel,
+                'chamado' as origem
+            FROM chamados
+            WHERE equipamento_id=?
+        `,[equipamentoId],(err2, chamados)=>{
+
+            if(err2) return res.send(err2.message);
+
+            // 🔥 JUNTA TUDO
+            const historico = [...manutencoes, ...chamados];
+
+            // 🔽 ORDENA POR DATA (mais recente primeiro)
+            historico.sort((a,b)=>{
+                return new Date(b.data_evento) - new Date(a.data_evento);
+            });
+
+            let html = `
+            <div class="card">
+                <h3>Histórico Completo</h3>
+                <table class="table">
+                    <tr>
+                        <th>Data</th>
+                        <th>Origem</th>
+                        <th>Tipo</th>
+                        <th>Descrição</th>
+                        <th>Responsável / Ambiente</th>
+                    </tr>
+
+                    ${historico.map(h=>`
+                        <tr style="background:${h.origem==='chamado' ? '#ffecec' : '#e8f5e9'};">
+                            <td>${h.data_evento || '-'}</td>
+                            <td>
+                                ${h.origem==='chamado' 
+                                    ? '<span class="badge bg-danger">Chamado</span>' 
+                                    : '<span class="badge bg-success">Manutenção</span>'}
+                            </td>
+                            <td>${h.tipo || '-'}</td>
+                            <td>${h.descricao || '-'}</td>
+                            <td>${h.responsavel || '-'}</td>
+                        </tr>
+                    `).join("")}
+                </table>
+            </div>
+            `;
+
+            res.send(layout("Histórico",html));
+        });
+    });
+});
+
+app.get("/relatorio-chamados", auth, (req, res) => {
+    db.all("SELECT * FROM filiais", [], (err, filiais) => {
+
+        res.send(layout("Relatório de Chamados", `
+            <div class="card">
+                <h3>Relatório de Chamados</h3>
+
+                <form id="filtroForm">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <select name="filial_id" class="form-control mb-2">
+                                <option value="">Todas Filiais</option>
+                                ${filiais.map(f => `<option value="${f.id}">${f.nome}</option>`).join('')}
+                            </select>
+                        </div>
+
+                        <div class="col-md-3">
+                            <input type="date" name="data_inicio" class="form-control mb-2">
+                        </div>
+
+                        <div class="col-md-3">
+                            <input type="date" name="data_fim" class="form-control mb-2">
+                        </div>
+
+                        <div class="col-md-3">
+                            <button class="btn btn-primary mb-2">Filtrar</button>
+                            <button type="button" id="imprimirBtn" class="btn btn-warning mb-2">Imprimir</button>
+                        </div>
+                    </div>
+                </form>
+
+                <div id="resultado"></div>
+            </div>
+
+            <script>
+                const form = document.getElementById('filtroForm');
+                const resultado = document.getElementById('resultado');
+
+                async function carregar() {
+                    const params = new URLSearchParams(new FormData(form));
+                    const res = await fetch('/relatorio-chamados/dados?' + params.toString());
+                    const html = await res.text();
+                    resultado.innerHTML = html;
+                }
+
+                form.addEventListener('submit', e => {
+                    e.preventDefault();
+                    carregar();
+                });
+
+                window.onload = carregar;
+
+                document.getElementById('imprimirBtn').addEventListener('click', () => {
+                    const conteudo = resultado.innerHTML;
+                    const win = window.open('', '', 'width=800,height=600');
+                    win.document.write(conteudo);
+                    win.print();
+                    win.close();
+                });
+            </script>
+        `));
+    });
+});
+
+app.get("/relatorio-chamados/dados", auth, (req, res) => {
+
+    let sql = `
+        SELECT ch.*, f.nome as filial_nome, e.modelo as equipamento_modelo
+        FROM chamados ch
+        LEFT JOIN filiais f ON ch.filial_id = f.id
+        LEFT JOIN equipamentos e ON ch.equipamento_id = e.id
+        WHERE 1=1
+    `;
+
     const params = [];
-    if (req.query.cliente_id) { sql += " AND c.id=?"; params.push(req.query.cliente_id); }
-    if (req.query.filial_id) { sql += " AND f.id=?"; params.push(req.query.filial_id); }
+
+    // filtro por filial
+    if (req.query.filial_id) {
+        sql += " AND ch.filial_id=?";
+        params.push(req.query.filial_id);
+    }
+
+    // filtro por data
+    if (req.query.data_inicio) {
+        sql += " AND date(ch.data_hora_chamado) >= date(?)";
+        params.push(req.query.data_inicio);
+    }
+
+    if (req.query.data_fim) {
+        sql += " AND date(ch.data_hora_chamado) <= date(?)";
+        params.push(req.query.data_fim);
+    }
+
+    sql += " ORDER BY ch.data_hora_chamado DESC";
 
     db.all(sql, params, (err, rows) => {
-        if (err) return res.send("Erro ao gerar PDF");
+        if (err) return res.send("Erro ao gerar relatório");
 
-        const doc = new PDFDocument({ margin: 30, size: 'A4' });
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'attachment; filename=relatorio.pdf');
-        doc.pipe(res);
+        let html = `
+        <table class="table table-bordered">
+            <tr>
+                <th>ID</th>
+                <th>Filial</th>
+                <th>Equipamento</th>
+                <th>Ambiente</th>
+                <th>Defeito</th>
+                <th>Data Chamado</th>
+                <th>Descrição</th>
+                <th>Resolvido em</th>
+            </tr>
 
-        doc.fontSize(16).text('Relatório de Equipamentos', { align: 'center' });
-        doc.moveDown();
+            ${rows.map(r => `
+                <tr>
+                    <td>${r.id}</td>
+                    <td>${r.filial_nome || '-'}</td>
+                    <td>${r.equipamento_modelo || '-'}</td>
+                    <td>${r.ambiente || '-'}</td>
+                    <td>${r.tipo_defeito || '-'}</td>
+                    <td>${r.data_hora_chamado || '-'}</td>
+                    <td>${r.descricao || '-'}</td>
+                    <td>${r.data_hora_resolucao || '-'}</td>
+                </tr>
+            `).join('')}
+        </table>
+        `;
 
-        rows.forEach(r => {
-            doc.fontSize(12)
-                .text(`ID: ${r.id} | Modelo: ${r.modelo} | Tipo: ${r.tipo} | Marca: ${r.marca}`)
-                .text(`Filial: ${r.filial_nome||'-'} | Cliente: ${r.cliente_nome||'-'}`)
-                .text(`Responsável: ${r.responsavel||'-'} | Executor: ${r.executor||'-'}`)
-                .text(`Última: ${r.ultima||'-'} | Próxima: ${r.proxima||'-'}`)
-                .moveDown();
-        });
-
-        doc.end();
+        res.send(html);
     });
 });
 // ===================
