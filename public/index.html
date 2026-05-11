@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BWJ Tech Soluções</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
+    body{background:#f4f6fb;color:#0a1f44}
+    header{background:linear-gradient(135deg,#ffffff 40%,#002a66 40%);color:white;padding:30px;border-radius:0 0 20px 20px}
+    .hero{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}
+    .hero-left{color:#0a1f44}
+    .hero-left h1{font-size:56px;font-weight:bold}
+    .hero-left h2{font-size:28px;color:#1d5fd0}
+    .hero-left p{margin:10px 0;font-size:22px}
+    .hero-right{color:white;max-width:400px}
+    nav{position:sticky;top:0;background:#001b44;padding:15px;z-index:10}
+    nav a{color:white;text-decoration:none;margin:0 15px;font-weight:bold}
+    section{padding:50px 30px}
+    .card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px}
+    .card{background:white;padding:25px;border-radius:15px;box-shadow:0 4px 15px rgba(0,0,0,.1)}
+    .btn{display:inline-block;background:#1d5fd0;color:white;padding:12px 20px;border-radius:8px;text-decoration:none;margin-top:15px}
+    iframe{width:100%;height:900px;border:none;border-radius:15px;background:white;box-shadow:0 4px 15px rgba(0,0,0,.1)}
+    footer{background:#001b44;color:white;text-align:center;padding:20px}
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="#inicio">Início</a>
+  <a href="#servicos">Serviços</a>
+  <a href="#sistema">Sistema HVAC</a>
+  <a href="#contato">Contato</a>
+</nav>
+
+<header id="inicio">
+  <div class="hero">
+    <div class="hero-left">
+      <h1>BWJ Tech</h1>
+      <h2>Soluções</h2>
+      <p>📞 (18) 99696-0207</p>
+      <p>👤 Técnico William Dalaqua</p>
+      <p>📍 Presidente Prudente - SP</p>
+      <p><strong>Atendimento rápido e profissional!</strong></p>
+    </div>
+    <div class="hero-right">
+      <h3>Mais saúde para sua família</h3>
+      <h3>Mais eficiência e economia</h3>
+      <h3>Ar limpo e ambiente saudável</h3>
+    </div>
+  </div>
+</header>
+
+<section id="servicos">
+  <h2>Nossos Serviços</h2><br>
+  <div class="card-grid">
+    <a href="/instalacoes.html" target="_blank" style="text-decoration:none; color:inherit;">
+      <div class="card">
+          <img src="/img/instalacao.jpg">
+          <h3>Instalação de Ar Condicionado</h3>
+      </div>
+    </a>
+    <div class="card">Manutenção Preventiva e Corretiva</div>
+    <div class="card">Limpeza e Higienização</div>
+    <div class="card">Carga de Gás</div>
+    <div class="card">Instalação Elétrica para Ar</div>
+    <div class="card">PMOC e Projetos</div>
+    <div class="card">Construção Steel Frame e Drywall</div>
+  </div>
+</section>
+
+<section id="sistema">
+    <h2>Sistema HVAC </h2>
+    <p>Acesse o sistema de gerenciamento clicando no botão abaixo:</p>
+
+    <a class="btn" href="/dashboard" target="_blank">
+        Sistema de Manutenção
+    </a>
+</section>
+
+<section id="contato">
+  <h2>Fale com a gente</h2>
+  <p>WhatsApp: (18) 99696-0207</p>
+  <p>Presidente Prudente - SP</p>
+</section>
+
+<footer>
+  Soluções inteligentes para seu conforto todos os dias.
+</footer>
+
+</body>
+</html>

@@ -6,15 +6,17 @@ const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
 
-
 const app = express();
 const PORT = 7500;
 
 // ===================
 // PASTAS
 // ===================
-if (!fs.existsSync("./uploads")) fs.mkdirSync("./uploads", { recursive: true });
-if (!fs.existsSync("./public/img")) fs.mkdirSync("./public/img", { recursive: true });
+if (!fs.existsSync("./uploads"))
+    fs.mkdirSync("./uploads", { recursive: true });
+
+if (!fs.existsSync("./public/img"))
+    fs.mkdirSync("./public/img", { recursive: true });
 
 // ===================
 // BANCO DE DADOS
@@ -24,78 +26,121 @@ const db = new sqlite3.Database("./database.db");
 db.serialize(() => {
 
     // ===== USUÁRIOS =====
-    db.run(`CREATE TABLE IF NOT EXISTS usuarios(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT UNIQUE,
-        senha TEXT
-    )`);
-    db.run(`INSERT OR IGNORE INTO usuarios(id,email,senha) VALUES(1,'admin@email.com','123')`);
+    db.run(`
+        CREATE TABLE IF NOT EXISTS usuarios(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE,
+            senha TEXT
+        )
+    `);
+
+    db.run(`
+        INSERT OR IGNORE INTO usuarios(id,email,senha)
+        VALUES(1,'admin@email.com','123')
+    `);
 
     // ===== CLIENTES =====
-    db.run(`CREATE TABLE IF NOT EXISTS clientes(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT
-    )`);
+    db.run(`
+        CREATE TABLE IF NOT EXISTS clientes(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT
+        )
+    `);
 
     // ===== FILIAIS =====
-    db.run(`CREATE TABLE IF NOT EXISTS filiais(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT,
-        cliente_id INTEGER
-    )`);
+    db.run(`
+        CREATE TABLE IF NOT EXISTS filiais(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT,
+            cliente_id INTEGER
+        )
+    `);
 
-    // ===== EQUIPAMENTOS =====
     db.run(`CREATE TABLE IF NOT EXISTS equipamentos(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        modelo TEXT,
-        tipo TEXT,
-        marca TEXT,
-        potencia TEXT,
-        ultima TEXT,
-        proxima TEXT,
-        responsavel TEXT,
-        executor TEXT,
-        foto TEXT,
-        filial_id INTEGER
-    )`);
-
-    // ===== CHAMADOS =====
-    db.run(`CREATE TABLE IF NOT EXISTS chamados(
-        id INTEGER PRIMARY KEY AUTOINCREMENT
-    )`);
-
-    // ===== Garantir que todas as colunas existam =====
-    db.all("PRAGMA table_info(chamados);", [], (err, cols) => {
-        if(err) return console.error("Erro ao verificar colunas de chamados:", err);
-
-        const colNames = cols.map(c => c.name);
-
-        if(!colNames.includes("filial_id")) db.run("ALTER TABLE chamados ADD COLUMN filial_id INTEGER");
-        if(!colNames.includes("equipamento_id")) db.run("ALTER TABLE chamados ADD COLUMN equipamento_id INTEGER");
-        if(!colNames.includes("ambiente")) db.run("ALTER TABLE chamados ADD COLUMN ambiente TEXT");
-        if(!colNames.includes("tipo_defeito")) db.run("ALTER TABLE chamados ADD COLUMN tipo_defeito TEXT");
-        if(!colNames.includes("data_hora_chamado")) db.run("ALTER TABLE chamados ADD COLUMN data_hora_chamado TEXT");
-        if(!colNames.includes("descricao")) db.run("ALTER TABLE chamados ADD COLUMN descricao TEXT");
-        if(!colNames.includes("data_hora_resolucao")) db.run("ALTER TABLE chamados ADD COLUMN data_hora_resolucao TEXT");
-    });
-
-    // ===== TABELA DE HISTORICO DE MANUTENCAO=======
-    db.run(`CREATE TABLE IF NOT EXISTS manutencoes(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    equipamento_id INTEGER,
-    data TEXT,
+    ambiente TEXT,
     tipo TEXT,
-    descricao TEXT,
-    responsavel TEXT,
-    executor TEXT
+    marca TEXT,
+    idade TEXT,
+    potencia TEXT,
+    ultima TEXT,
+    proxima TEXT,
+    foto TEXT,
+    filial_id INTEGER
 )`);
 
+// Garantir coluna idade
+db.all("PRAGMA table_info(equipamentos);", [], (err, cols) => {
+    if (err) return console.error(err);
+
+    const colNames = cols.map(c => c.name);
+
+    if (!colNames.includes("idade")) {
+        db.run("ALTER TABLE equipamentos ADD COLUMN idade TEXT");
+        console.log("Coluna idade adicionada!");
+    }
+
+    if (!colNames.includes("responsavel")) {
+        db.run("ALTER TABLE equipamentos ADD COLUMN responsavel TEXT");
+        console.log("Coluna responsavel adicionada!");
+    }
 });
+
+    // ===== CHAMADOS =====
+    db.run(`
+        CREATE TABLE IF NOT EXISTS chamados(
+            id INTEGER PRIMARY KEY AUTOINCREMENT
+        )
+    `);
+
+    db.all("PRAGMA table_info(chamados);", [], (err, cols) => {
+        if (err) return console.log(err);
+
+        const nomes = cols.map(c => c.name);
+
+        if (!nomes.includes("filial_id"))
+            db.run("ALTER TABLE chamados ADD COLUMN filial_id INTEGER");
+
+        if (!nomes.includes("equipamento_id"))
+            db.run("ALTER TABLE chamados ADD COLUMN equipamento_id INTEGER");
+
+        if (!nomes.includes("ambiente"))
+            db.run("ALTER TABLE chamados ADD COLUMN ambiente TEXT");
+
+        if (!nomes.includes("tipo_defeito"))
+            db.run("ALTER TABLE chamados ADD COLUMN tipo_defeito TEXT");
+
+        if (!nomes.includes("data_hora_chamado"))
+            db.run("ALTER TABLE chamados ADD COLUMN data_hora_chamado TEXT");
+
+        if (!nomes.includes("descricao"))
+            db.run("ALTER TABLE chamados ADD COLUMN descricao TEXT");
+
+        if (!nomes.includes("data_hora_resolucao"))
+            db.run("ALTER TABLE chamados ADD COLUMN data_hora_resolucao TEXT");
+    });
+
+    // ===== HISTÓRICO DE MANUTENÇÕES =====
+    db.run(`
+        CREATE TABLE IF NOT EXISTS manutencoes(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            equipamento_id INTEGER,
+            data TEXT,
+            tipo TEXT,
+            descricao TEXT,
+            responsavel TEXT
+        )
+    `);
+});
+
 // ===================
 // MIDDLEWARE
 // ===================
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+app.use(express.static("public")); 
+
 app.use("/uploads", express.static("uploads"));
 app.use("/img", express.static("public/img"));
 
@@ -110,16 +155,22 @@ app.use(session({
 // ===================
 const storage = multer.diskStorage({
     destination: "uploads/",
-    filename: (req, file, cb) => cb(null, Date.now() + "_" + file.originalname)
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + "_" + file.originalname);
+    }
 });
+
 const upload = multer({ storage });
 
 // ===================
 // AUTENTICAÇÃO
 // ===================
 function auth(req, res, next) {
-    if (req.session.logado) next();
-    else res.redirect("/login");
+    if (req.session.logado) {
+        next();
+    } else {
+        res.redirect("/login");
+    }
 }
 
 // ===================
@@ -132,180 +183,370 @@ function layout(titulo, conteudo) {
     <head>
         <meta charset="UTF-8">
         <title>${titulo}</title>
+
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
         <style>
-            body { 
-                background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('/img/bg.jpeg'); 
-                background-size: cover; color: white; 
+            body{
+                background:
+                linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)),
+                url('/img/WhatsApp Image 2026-05-11 at 10.50.42.jpeg');
+                background-size:cover;
+                color:white;
             }
-            .navbar { background: rgba(255,255,255,0.9); }
-            .nav-link, .dropdown-item { color: black !important; }
-            .dropdown-menu { background: white; }
-            .card { background: white; color: black; border-radius: 15px; padding:20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); margin-bottom:20px; }
-            .logo { height: 40px; }
-            table { color:black; }
-            img.preview { max-width: 150px; margin-top: 10px; border-radius:5px; }
+
+            .navbar{
+                background:rgba(255,255,255,0.9);
+            }
+
+            .nav-link,
+            .dropdown-item{
+                color:black !important;
+            }
+
+            .dropdown-menu{
+                background:white;
+            }
+
+            .card{
+                background:white;
+                color:black;
+                border-radius:15px;
+                padding:20px;
+                box-shadow:0 10px 30px rgba(0,0,0,0.3);
+                margin-bottom:20px;
+            }
+
+            .logo{
+                height:40px;
+            }
+
+            table{
+                color:black;
+            }
+
+            img.preview{
+                max-width:150px;
+                margin-top:10px;
+                border-radius:5px;
+            }
         </style>
     </head>
+
     <body>
+
         <nav class="navbar navbar-expand-lg p-3 d-flex justify-content-between">
-            <img src="/img/logo.jpeg" class="logo">
+            
+
             <div class="collapse navbar-collapse">
-                ${titulo !== "Login" && titulo !== "Cadastrar" ? `
-                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                    <li class="nav-item"><a class="nav-link btn btn-light btn-sm mx-1" href="/dashboard">Dashboard</a></li>
+
+            ${
+                titulo !== "Login" && titulo !== "Cadastrar"
+                ? `
+                <ul class="navbar-nav me-auto">
+
+                    <li class="nav-item">
+                        <a class="nav-link btn btn-light btn-sm mx-1"
+                           href="/dashboard">Dashboard</a>
+                    </li>
+
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle btn btn-light btn-sm mx-1" href="#" data-bs-toggle="dropdown">Clientes</a>
+                        <a class="nav-link dropdown-toggle btn btn-light btn-sm mx-1"
+                           data-bs-toggle="dropdown">
+                           Clientes
+                        </a>
+
                         <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="/clientes">Todos os Clientes</a></li>
-                            <li><a class="dropdown-item" href="/clientes/novo">Novo Cliente</a></li>
+                            <li>
+                                <a class="dropdown-item"
+                                   href="/clientes">
+                                   Todos os Clientes
+                                </a>
+                            </li>
+
+                            <li>
+                                <a class="dropdown-item"
+                                   href="/clientes/novo">
+                                   Novo Cliente
+                                </a>
+                            </li>
                         </ul>
                     </li>
+
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle btn btn-light btn-sm mx-1" href="#" data-bs-toggle="dropdown">Filiais</a>
+                        <a class="nav-link dropdown-toggle btn btn-light btn-sm mx-1"
+                           data-bs-toggle="dropdown">
+                           Filiais
+                        </a>
+
                         <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="/filiais">Todas as Filiais</a></li>
-                            <li><a class="dropdown-item" href="/filiais/novo">Nova Filial</a></li>
+                            <li>
+                                <a class="dropdown-item"
+                                   href="/filiais">
+                                   Todas as Filiais
+                                </a>
+                            </li>
+
+                            <li>
+                                <a class="dropdown-item"
+                                   href="/filiais/novo">
+                                   Nova Filial
+                                </a>
+                            </li>
                         </ul>
                     </li>
+
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle btn btn-light btn-sm mx-1" href="#" data-bs-toggle="dropdown">Equipamentos</a>
+                        <a class="nav-link dropdown-toggle btn btn-light btn-sm mx-1"
+                           data-bs-toggle="dropdown">
+                           Equipamentos
+                        </a>
+
                         <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="/equipamentos">Todos os Equipamentos</a></li>
-                            <li><a class="dropdown-item" href="/equipamentos/novo">Novo Equipamento</a></li>
-                            <li class="nav-item"><a class="nav-link btn btn-warning btn-sm mx-1" href="/relatorio">Relatório</a></li>
+                            <li>
+                                <a class="dropdown-item"
+                                   href="/equipamentos">
+                                   Todos os Equipamentos
+                                </a>
+                            </li>
+
+                            <li>
+                                <a class="dropdown-item"
+                                   href="/equipamentos/novo">
+                                   Novo Equipamento
+                                </a>
+                            </li>
+
+                            <li>
+                                <a class="dropdown-item"
+                                   href="/relatorio">
+                                   Relatório
+                                </a>
+                            </li>
                         </ul>
                     </li>
+
                     <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle btn btn-info btn-sm mx-1" href="#" role="button" data-bs-toggle="dropdown">Chamados</a>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="/chamados">Abrir Chamados</a></li>
-                        <li><a class="dropdown-item" href="/relatorio-chamados">Relatório de Chamados</a></li>
-                    </ul>
-                </li>
-                    
-                    
+                        <a class="nav-link dropdown-toggle btn btn-info btn-sm mx-1"
+                           data-bs-toggle="dropdown">
+                           Chamados
+                        </a>
+
+                        <ul class="dropdown-menu">
+                            <li>
+                                <a class="dropdown-item"
+                                   href="/chamados">
+                                   Abrir Chamados
+                                </a>
+                            </li>
+
+                            <li>
+                                <a class="dropdown-item"
+                                   href="/relatorio-chamados">
+                                   Relatório de Chamados
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+
                 </ul>
-                <a href="/logout" class="btn btn-danger btn-sm">Sair</a>` : ""}
+
+                <a href="/logout" class="btn btn-danger btn-sm">
+                    Sair
+                </a>
+                `
+                : ""
+            }
+
             </div>
         </nav>
-        <div class="container mt-4">${conteudo}</div>
+
+        <div class="container mt-4">
+            ${conteudo}
+        </div>
+
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
     </body>
     </html>
     `;
 }
 
 // ===================
-// LOGIN/CADASTRO/LOGOUT
+// LOGIN
 // ===================
-app.get("/", (req,res)=>res.send(layout("Página Inicial",`
-    <h1 style="text-align:center;margin-top:50px;">Sistema HVAC Athia</h1>
-    <div style="text-align:center;">
-        <a href="/login" class="btn btn-primary">Entrar</a>
-        <a href="/cadastrar" class="btn btn-success">Cadastrar</a>
-    </div>
-`)));
+app.get("/", (req, res) => {
+    res.send(layout("Página Inicial", `
+        <h1 style="text-align:center;margin-top:50px;">
+            Sistema HVAC Athia
+        </h1>
 
-app.get("/cadastrar",(req,res)=>{
-    res.send(layout("Cadastrar",`
-        <div class="card">
-            <h3>Cadastrar Usuário</h3>
-            <form method="POST" id="cadForm">
-                <input name="email" type="email" class="form-control mb-2" placeholder="Email" required>
-                <input name="senha" type="password" class="form-control mb-2" placeholder="Senha" required>
-                <input name="senha2" type="password" class="form-control mb-2" placeholder="Confirmar Senha" required>
-                <button class="btn btn-success">Cadastrar</button>
-            </form>
-            <div id="msg" class="mt-2 text-danger"></div>
+        <div style="text-align:center;">
+            <a href="/login" class="btn btn-primary">
+                Entrar
+            </a>
+
+            <a href="/cadastrar" class="btn btn-success">
+                Cadastrar
+            </a>
         </div>
-        <script>
-            const form = document.getElementById('cadForm');
-            form.addEventListener('submit', async e=>{
-                e.preventDefault();
-                const data = new URLSearchParams(new FormData(form));
-                const res = await fetch('/cadastrar',{method:'POST',body:data});
-                const text = await res.text();
-                document.getElementById('msg').innerHTML=text;
-                if(text==='ok') window.location.href='/login';
-            });
-        </script>
     `));
 });
 
-app.post("/cadastrar",(req,res)=>{
-    const {email,senha,senha2}=req.body;
-    if(senha!==senha2) return res.send("Senhas não conferem!");
-    db.run("INSERT INTO usuarios(email,senha) VALUES(?,?)",[email,senha],err=>{if(err) return res.send("Email já cadastrado!"); res.send("ok");});
+app.get("/login", (req, res) => {
+    res.send(layout("Login", `
+        <div class="card">
+            <h3>Login</h3>
+
+            <form method="POST">
+                <input
+                    name="email"
+                    class="form-control mb-2"
+                    placeholder="Email"
+                    required>
+
+                <input
+                    type="password"
+                    name="senha"
+                    class="form-control mb-2"
+                    placeholder="Senha"
+                    required>
+
+                <button class="btn btn-primary">
+                    Entrar
+                </button>
+            </form>
+        </div>
+    `));
 });
 
-app.get("/login",(req,res)=>res.send(layout("Login",`
-    <div class="card">
-        <h3>Login</h3>
-        <form method="POST" id="loginForm">
-            <input name="email" class="form-control mb-2" placeholder="Email" required>
-            <input type="password" name="senha" class="form-control mb-2" placeholder="Senha" required>
-            <button class="btn btn-primary">Entrar</button>
-        </form>
-        <div id="msg" class="mt-2 text-danger"></div>
-    </div>
-    <script>
-        const form = document.getElementById('loginForm');
-        form.addEventListener('submit', async e=>{
-            e.preventDefault();
-            const data=new URLSearchParams(new FormData(form));
-            const res=await fetch('/login',{method:'POST',body:data});
-            const text=await res.text();
-            if(text==='ok') window.location.href='/dashboard';
-            else document.getElementById('msg').innerHTML=text;
-        });
-    </script>
-`)));
+app.post("/login", (req, res) => {
+    const { email, senha } = req.body;
 
-app.post("/login",(req,res)=>{
-    const {email,senha}=req.body;
-    db.get("SELECT * FROM usuarios WHERE email=? AND senha=?",[email,senha],(err,row)=>{
-        if(row){req.session.logado=true;res.send("ok");} else res.send("Email ou senha inválidos!");
-    });
+    db.get(
+        "SELECT * FROM usuarios WHERE email=? AND senha=?",
+        [email, senha],
+        (err, row) => {
+            if (row) {
+                req.session.logado = true;
+                res.redirect("/dashboard");
+            } else {
+                res.send("Login inválido");
+            }
+        }
+    );
 });
 
-app.get("/logout",(req,res)=>{req.session.destroy();res.redirect("/");});
-
-// ===================
-// DASHBOARD
-// ===================
-
+app.get("/logout", (req, res) => {
+    req.session.destroy();
+    res.redirect("/");
+});
+//----------- DASHBOARD----------//
 app.get("/dashboard", auth, (req,res)=>{
-    db.all("SELECT * FROM clientes",[],(err,clientes)=>{
-        db.all("SELECT * FROM filiais",[],(err2,filiais)=>{
-            db.all("SELECT * FROM equipamentos",[],(err3,equipamentos)=>{
 
-                res.send(layout("Dashboard",`
+    db.all("SELECT * FROM clientes", [], (err, clientes)=>{
+        db.all("SELECT * FROM filiais", [], (err2, filiais)=>{
+            db.all("SELECT * FROM equipamentos", [], (err3, equipamentos)=>{
+
+                const hoje = new Date();
+
+                let atrasados = 0;
+                let vencendo = 0;
+
+                equipamentos.forEach(eq => {
+                    if(eq.proxima){
+                        const dataProxima = new Date(eq.proxima);
+                        const diffDias = Math.ceil(
+                            (dataProxima - hoje) / (1000*60*60*24)
+                        );
+
+                        if(diffDias < 0){
+                            atrasados++;
+                        } else if(diffDias <= 30){
+                            vencendo++;
+                        }
+                    }
+                });
+
+                res.send(layout("Dashboard", `
                     <style>
-                        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: #f0f2f5; color: #333; min-height:100vh; padding-bottom:50px; }
-                        .card { background-color: #fff; color: #333; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
-                        .card h3 { margin:0; font-size:1.2rem; }
-                        .card span { font-size:1.5rem; font-weight:bold; }
-                        .btn-report { background: linear-gradient(90deg,#ff7e5f,#feb47b); border:none; color:white; font-weight:bold; padding:10px 20px; border-radius:8px; text-decoration:none; }
-                        .btn-report:hover { opacity:0.9; }
-                        .stats-container { display:flex; gap:20px; flex-wrap:wrap; justify-content:center; margin-bottom:30px; }
+                        .stats-container{
+                            display:flex;
+                            gap:20px;
+                            flex-wrap:wrap;
+                            justify-content:center;
+                        }
+
+                        .card-box{
+                            background:white;
+                            color:black;
+                            padding:20px;
+                            border-radius:12px;
+                            width:220px;
+                            text-align:center;
+                            box-shadow:0 4px 10px rgba(0,0,0,0.2);
+                        }
+
+                        .numero{
+                            font-size:32px;
+                            font-weight:bold;
+                        }
+
+                        .alerta-vermelho{
+                            background:#ffdddd;
+                            border-left:6px solid red;
+                        }
+
+                        .alerta-amarelo{
+                            background:#fff5cc;
+                            border-left:6px solid orange;
+                        }
                     </style>
 
-                    <h2 style="text-align:center; margin-bottom:30px;">Dashboard</h2>
+                    <h2 class="text-center mb-4">
+                        Dashboard
+                    </h2>
+
                     <div class="stats-container">
-                        <div class="card" style="width:200px; text-align:center;"><h3>Clientes</h3><span>${clientes.length}</span></div>
-                        <div class="card" style="width:200px; text-align:center;"><h3>Filiais</h3><span>${filiais.length}</span></div>
-                        <div class="card" style="width:200px; text-align:center;"><h3>Equipamentos</h3><span>${equipamentos.length}</span></div>
-                        
+
+                        <div class="card-box">
+                            <h4>Clientes</h4>
+                            <div class="numero">${clientes.length}</div>
+                        </div>
+
+                        <div class="card-box">
+                            <h4>Filiais</h4>
+                            <div class="numero">${filiais.length}</div>
+                        </div>
+
+                        <div class="card-box">
+                            <h4>Equipamentos</h4>
+                            <div class="numero">${equipamentos.length}</div>
+                        </div>
+
+                        <div class="card-box alerta-amarelo">
+                            <h4>Vencendo</h4>
+                            <div class="numero">${vencendo}</div>
+                        </div>
+
+                        <div class="card-box alerta-vermelho">
+                            <h4>Atrasados</h4>
+                            <div class="numero">${atrasados}</div>
+                        </div>
+
                     </div>
 
-                    <div style="text-align:center; margin-bottom:50px;">
-                        <a href="/relatorio" class="btn-report"><i class="fas fa-print"></i> Gerar Relatórios</a>
+                    <div class="text-center mt-4">
+                        <a href="/relatorio" class="btn btn-primary">
+                            Ver Relatório
+                        </a>
                     </div>
                 `));
+
             });
         });
     });
+
 });
 
 
@@ -459,7 +700,7 @@ app.get("/relatorio", auth, (req, res) => {
 // ===================
 app.get("/chamados/relatorio", auth, (req, res) => {
     let sql = `
-        SELECT ch.*, f.nome as filial_nome, e.modelo as equipamento_modelo, e.proxima as proxima_manutencao
+        SELECT ch.*, f.nome as filial_nome, e.ambiente as equipamento_ambiente, e.proxima as proxima_manutencao
         FROM chamados ch
         LEFT JOIN filiais f ON ch.filial_id=f.id
         LEFT JOIN equipamentos e ON ch.equipamento_id=e.id
@@ -502,7 +743,7 @@ app.get("/chamados/relatorio", auth, (req, res) => {
             html += `<tr>
                 <td>${r.id}</td>
                 <td>${r.filial_nome || '-'}</td>
-                <td>${r.equipamento_modelo || '-'}</td>
+                <td>${r.equipamento_ambiente || '-'}</td>
                 <td>${r.ambiente || '-'}</td>
                 <td>${r.tipo_defeito || '-'}</td>
                 <td>${r.data_hora_chamado || '-'}</td>
@@ -603,369 +844,427 @@ app.get("/filiais/excluir/:id", auth, (req,res)=>{
 // ===================
 // EQUIPAMENTOS CRUD
 // ===================
+
 app.get("/equipamentos", auth, (req,res)=>{
-    db.all(`SELECT e.*, f.nome as filial_nome, c.nome as cliente_nome 
-            FROM equipamentos e 
-            LEFT JOIN filiais f ON e.filial_id=f.id 
-            LEFT JOIN clientes c ON f.cliente_id=c.id`,[],(err,rows)=>{
+    db.all(`
+        SELECT e.*, f.nome as filial_nome, c.nome as cliente_nome
+        FROM equipamentos e
+        LEFT JOIN filiais f ON e.filial_id=f.id
+        LEFT JOIN clientes c ON f.cliente_id=c.id
+    `,[],(err,rows)=>{
+
         let html = `
         <div class="card">
             <h3>Equipamentos</h3>
             <a href="/equipamentos/novo" class="btn btn-success mb-2">Novo Equipamento</a>
+
             <table class="table table-bordered">
-                <tr><th>ID</th><th>Modelo</th><th>Tipo</th><th>Marca</th><th>Filial</th><th>Cliente</th><th>Ações</th></tr>
-                ${rows.map(r=>`<tr>
-                    <td>${r.id}</td>
-                    <td>${r.modelo}</td>
-                    <td>${r.tipo}</td>
-                    <td>${r.marca}</td>
-                    <td>${r.filial_nome||'-'}</td>
-                    <td>${r.cliente_nome||'-'}</td>
-                    <td>
-                        <a href="/equipamentos/editar/${r.id}" class="btn btn-sm btn-primary">Editar</a>
-                        <a href="/equipamentos/excluir/${r.id}" class="btn btn-sm btn-danger">Excluir</a>
-                        <a href="/equipamentos/manutencao/${r.id}" class="btn btn-sm btn-warning">Manutenção</a>
-                        <a href="/equipamentos/historico/${r.id}" class="btn btn-sm btn-info">Histórico</a>
-                    </td>
-                </tr>`).join('')}
+                <tr>
+                    <th>ID</th>
+                    <th>Ambiente</th>
+                    <th>Tipo</th>
+                    <th>Marca</th>
+                    <th>Idade</th>
+                    <th>Filial</th>
+                    <th>Ações</th>
+                </tr>
+
+                ${rows.map(r=>`
+                    <tr>
+                        <td>${r.id}</td>
+                        <td>${r.ambiente}</td>
+                        <td>${r.tipo}</td>
+                        <td>${r.marca}</td>
+                        <td>${r.idade || "-"}</td>
+                        <td>${r.filial_nome || "-"}</td>
+                        <td>
+                            <a href="/equipamentos/editar/${r.id}" class="btn btn-sm btn-primary">Editar</a>
+                            <a href="/equipamentos/excluir/${r.id}" class="btn btn-sm btn-danger">Excluir</a>
+                            <a href="/equipamentos/manutencao/${r.id}" class="btn btn-sm btn-warning">Manutenção</a>
+                            <a href="/equipamentos/historico/${r.id}" class="btn btn-sm btn-info">Histórico</a>
+                        </td>
+                    </tr>
+                `).join("")}
             </table>
-        </div>`;
-        res.send(layout("Equipamentos",html));
+        </div>
+        `;
+
+        res.send(layout("Equipamentos", html));
     });
 });
 
+
 app.get("/equipamentos/novo", auth, (req,res)=>{
-    db.all(`SELECT f.id as filial_id, f.nome as filial_nome, c.nome as cliente_nome 
-            FROM filiais f 
-            LEFT JOIN clientes c ON f.cliente_id = c.id`,[],(err,filiais)=>{
+    db.all("SELECT * FROM filiais",[],(err,filiais)=>{
+
         res.send(layout("Novo Equipamento",`
             <div class="card">
                 <h3>Novo Equipamento</h3>
+
                 <form method="POST" enctype="multipart/form-data">
-                    <input name="modelo" class="form-control mb-2" placeholder="Modelo" required>
+
+                    <input name="ambiente" class="form-control mb-2" placeholder="Ambiente" required>
+
                     <input name="tipo" class="form-control mb-2" placeholder="Tipo" required>
+
                     <input name="marca" class="form-control mb-2" placeholder="Marca" required>
-                    <input name="potencia" class="form-control mb-2" placeholder="Potência" required>
-                    <input name="ultima" class="form-control mb-2" type="date" placeholder="Última Manutenção" required>
-                    <input name="proxima" class="form-control mb-2" type="date" placeholder="Próxima Manutenção" required>
-                    <input name="responsavel" class="form-control mb-2" placeholder="Responsável" required>
-                    <input name="executor" class="form-control mb-2" placeholder="Executor" required>
+
+                    <input name="idade" class="form-control mb-2" placeholder="Idade do equipamento" required>
+
+                    <input name="potencia" class="form-control mb-2" placeholder="Potência">
+
+                    <input name="ultima" type="date" class="form-control mb-2" required>
+
+                    <input name="proxima" type="date" class="form-control mb-2" required>
+
+                    <input name="responsavel" class="form-control mb-2" placeholder="Responsável">
+
                     <select name="filial_id" class="form-control mb-2" required>
-                        ${filiais.map(f=>`<option value="${f.filial_id}">${f.filial_nome} - ${f.cliente_nome || '-'}</option>`).join('')}
+                        ${filiais.map(f=>`
+                            <option value="${f.id}">
+                                ${f.nome}
+                            </option>
+                        `).join("")}
                     </select>
+
                     <input type="file" name="foto" class="form-control mb-2">
-                    <button class="btn btn-success">Salvar</button>
+
+                    <button class="btn btn-success">
+                        Salvar
+                    </button>
                 </form>
             </div>
         `));
     });
 });
 
+
 app.post("/equipamentos/novo", auth, upload.single("foto"), (req,res)=>{
 
-    console.log("🔥 POST /equipamentos/novo");
-
-    console.log("BODY:", req.body);
-    console.log("FILE:", req.file);
-
-    const { modelo,tipo,marca,potencia,ultima,proxima,responsavel,executor,filial_id } = req.body;
-
-    // validação obrigatória
-    if(!modelo || !tipo || !marca || !filial_id){
-        return res.send("❌ Campos obrigatórios faltando");
-    }
+    const {
+        ambiente,
+        tipo,
+        marca,
+        idade,
+        potencia,
+        ultima,
+        proxima,
+        responsavel,
+        filial_id
+    } = req.body;
 
     const foto = req.file ? req.file.filename : null;
 
     db.run(`
         INSERT INTO equipamentos
-        (modelo,tipo,marca,potencia,ultima,proxima,responsavel,executor,filial_id,foto)
+        (
+            ambiente,
+            tipo,
+            marca,
+            idade,
+            potencia,
+            ultima,
+            proxima,
+            responsavel,
+            filial_id,
+            foto
+        )
         VALUES(?,?,?,?,?,?,?,?,?,?)
     `,
-    [modelo,tipo,marca,potencia,ultima,proxima,responsavel,executor,filial_id,foto],
-    function(err){
-
-        if(err){
-            console.log("❌ ERRO SQLITE:", err.message);
-            return res.send("Erro ao salvar: " + err.message);
-        }
-
-        console.log("✅ SALVO ID:", this.lastID);
+    [
+        ambiente,
+        tipo,
+        marca,
+        idade,
+        potencia,
+        ultima,
+        proxima,
+        responsavel,
+        filial_id,
+        foto
+    ],
+    (err)=>{
+        if(err) return res.send(err.message);
 
         res.redirect("/equipamentos");
     });
 });
 
+
 app.get("/equipamentos/editar/:id", auth, (req,res)=>{
-    db.get("SELECT * FROM equipamentos WHERE id=?",[req.params.id],(err,row)=>{
+
+    db.get("SELECT * FROM equipamentos WHERE id=?", [req.params.id], (err,row)=>{
+
         db.all("SELECT * FROM filiais",[],(err2,filiais)=>{
+
             res.send(layout("Editar Equipamento",`
                 <div class="card">
                     <h3>Editar Equipamento</h3>
+
                     <form method="POST" enctype="multipart/form-data">
-                        <input name="modelo" class="form-control mb-2" value="${row.modelo}" required>
+
+                        <input name="ambiente" class="form-control mb-2" value="${row.ambiente}" required>
+
                         <input name="tipo" class="form-control mb-2" value="${row.tipo}" required>
+
                         <input name="marca" class="form-control mb-2" value="${row.marca}" required>
-                        <input name="potencia" class="form-control mb-2" value="${row.potencia}" required>
-                        <input name="ultima" class="form-control mb-2" type="date" value="${row.ultima}" required>
-                        <input name="proxima" class="form-control mb-2" type="date" value="${row.proxima}" required>
-                        <input name="responsavel" class="form-control mb-2" value="${row.responsavel}" required>
-                        <input name="executor" class="form-control mb-2" value="${row.executor}" required>
-                        <select name="filial_id" class="form-control mb-2" required>
-                            ${filiais.map(f=>`<option value="${f.id}" ${f.id===row.filial_id?'selected':''}>${f.nome}</option>`).join('')}
+
+                        <input name="idade" class="form-control mb-2" value="${row.idade}" required>
+
+                        <input name="potencia" class="form-control mb-2" value="${row.potencia}">
+
+                        <input name="ultima" type="date" class="form-control mb-2" value="${row.ultima}">
+
+                        <input name="proxima" type="date" class="form-control mb-2" value="${row.proxima}">
+
+                        <input name="responsavel" class="form-control mb-2" value="${row.responsavel}">
+
+                        <select name="filial_id" class="form-control mb-2">
+                            ${filiais.map(f=>`
+                                <option value="${f.id}" ${f.id===row.filial_id ? "selected" : ""}>
+                                    ${f.nome}
+                                </option>
+                            `).join("")}
                         </select>
+
                         <input type="file" name="foto" class="form-control mb-2">
-                        <button class="btn btn-success">Salvar</button>
+
+                        <button class="btn btn-success">
+                            Salvar
+                        </button>
                     </form>
-                    ${row.foto?`<img src="/uploads/${row.foto}" class="preview">`:''}
+
+                    ${row.foto ? `<img src="/uploads/${row.foto}" class="preview">` : ""}
                 </div>
             `));
         });
     });
 });
+
 
 app.post("/equipamentos/editar/:id", auth, upload.single("foto"), (req,res)=>{
-    const { modelo,tipo,marca,potencia,ultima,proxima,responsavel,executor,filial_id } = req.body;
-    let fotoSql = req.file ? `, foto='${req.file.filename}'` : '';
-    db.run(`UPDATE equipamentos SET modelo=?,tipo=?,marca=?,potencia=?,ultima=?,proxima=?,responsavel=?,executor=?,filial_id=? ${fotoSql} WHERE id=?`,
-        [modelo,tipo,marca,potencia,ultima,proxima,responsavel,executor,filial_id,req.params.id],()=>res.redirect("/equipamentos"));
+
+    const {
+        ambiente,
+        tipo,
+        marca,
+        idade,
+        potencia,
+        ultima,
+        proxima,
+        responsavel,
+        filial_id
+    } = req.body;
+
+    let fotoSql = "";
+
+    if(req.file){
+        fotoSql = `, foto='${req.file.filename}'`;
+    }
+
+    db.run(`
+        UPDATE equipamentos SET
+            ambiente=?,
+            tipo=?,
+            marca=?,
+            idade=?,
+            potencia=?,
+            ultima=?,
+            proxima=?,
+            responsavel=?,
+            filial_id=?
+            ${fotoSql}
+        WHERE id=?
+    `,
+    [
+        ambiente,
+        tipo,
+        marca,
+        idade,
+        potencia,
+        ultima,
+        proxima,
+        responsavel,
+        filial_id,
+        req.params.id
+    ],
+    ()=>{
+        res.redirect("/equipamentos");
+    });
 });
+
 
 app.get("/equipamentos/excluir/:id", auth, (req,res)=>{
-    db.run("DELETE FROM equipamentos WHERE id=?",[req.params.id],()=>res.redirect("/equipamentos"));
+    db.run(
+        "DELETE FROM equipamentos WHERE id=?",
+        [req.params.id],
+        ()=>res.redirect("/equipamentos")
+    );
 });
-
-/// ===================
-// CHAMADOS CRUD
-// ===================
-
-app.get("/chamados", auth, (req, res) => {
-    db.all(`
-        SELECT ch.*, f.nome as filial_nome, e.modelo as equipamento_modelo
-        FROM chamados ch
-        LEFT JOIN filiais f ON ch.filial_id=f.id
-        LEFT JOIN equipamentos e ON ch.equipamento_id=e.id
-        ORDER BY ch.data_hora_chamado DESC
-    `, [], (err, rows) => {
-        if(err) return res.send("Erro ao carregar chamados: " + err.message);
-        let html = `
-        <div class="card">
-            <h3>Chamados</h3>
-            <a href="/chamados/novo" class="btn btn-success mb-2">Novo Chamado</a>
-            <table class="table table-bordered">
-                <tr>
-                    <th>ID</th><th>Filial</th><th>Equipamento</th><th>Ambiente</th>
-                    <th>Tipo de Defeito</th><th>Data/Hora Chamado</th>
-                    <th>Descrição/Resolução</th><th>Ações</th>
-                </tr>
-                ${rows.map(r => `<tr>
-                    <td>${r.id}</td>
-                    <td>${r.filial_nome||'-'}</td>
-                    <td>${r.equipamento_modelo||'-'}</td>
-                    <td>${r.ambiente||'-'}</td>
-                    <td>${r.tipo_defeito||'-'}</td>
-                    <td>${r.data_hora_chamado||'-'}</td>
-                    <td>${r.descricao||'-'}<br>${r.data_hora_resolucao||''}</td>
-                    <td>
-                        <a href="/chamados/editar/${r.id}" class="btn btn-sm btn-primary">Editar</a>
-                        <a href="/chamados/excluir/${r.id}" class="btn btn-sm btn-danger">Excluir</a>
-                    </td>
-                </tr>`).join('')}
-            </table>
-        </div>`;
-        res.send(layout("Chamados", html));
-    });
-});
-
-// Formulário para criar novo chamado
-app.get("/chamados/novo", auth, (req, res) => {
-    db.all("SELECT * FROM filiais", [], (err, filiais) => {
-        if(err) return res.send("Erro ao carregar filiais: " + err.message);
-
-        db.all("SELECT * FROM equipamentos", [], (err2, equipamentos) => {
-            if(err2) return res.send("Erro ao carregar equipamentos: " + err2.message);
-
-            res.send(layout("Novo Chamado", `
-                <div class="card">
-                    <h3>Novo Chamado</h3>
-                    <form method="POST">
-                        <select name="filial_id" class="form-control mb-2" required>
-                            <option value="">Selecione a filial</option>
-                            ${filiais.map(f => `<option value="${f.id}">${f.nome}</option>`).join('')}
-                        </select>
-                        <select name="equipamento_id" class="form-control mb-2" required>
-                            <option value="">Selecione o equipamento</option>
-                            ${equipamentos.map(e => `<option value="${e.id}">${e.modelo}</option>`).join('')}
-                        </select>
-                        <input name="ambiente" class="form-control mb-2" placeholder="Ambiente" required>
-                        <input name="tipo_defeito" class="form-control mb-2" placeholder="Tipo de Defeito" required>
-                        <button class="btn btn-success">Salvar</button>
-                    </form>
-                </div>
-            `));
-        });
-    });
-});
-
-// Criar novo chamado
-app.post("/chamados/novo", auth, (req, res) => {
-    const { filial_id, equipamento_id, ambiente, tipo_defeito } = req.body;
-    const data_hora_chamado = new Date().toLocaleString();
-    db.run(`INSERT INTO chamados(filial_id,equipamento_id,ambiente,tipo_defeito,data_hora_chamado)
-            VALUES(?,?,?,?,?)`,
-        [filial_id, equipamento_id, ambiente, tipo_defeito, data_hora_chamado],
-        function(err){
-            if(err) return res.send("Erro ao salvar chamado: " + err.message);
-            res.redirect("/chamados");
-        });
-});
-
-// Formulário para editar chamado
-app.get("/chamados/editar/:id", auth, (req, res) => {
-    db.get("SELECT * FROM chamados WHERE id=?", [req.params.id], (err, chamado) => {
-        if(err || !chamado) return res.send("Chamado não encontrado.");
-
-        db.all("SELECT * FROM filiais", [], (err2, filiais) => {
-            db.all("SELECT * FROM equipamentos", [], (err3, equipamentos) => {
-                res.send(layout("Editar Chamado", `
-                    <div class="card">
-                        <h3>Editar Chamado</h3>
-                        <form method="POST">
-                            <select name="filial_id" class="form-control mb-2" required>
-                                ${filiais.map(f => `<option value="${f.id}" ${f.id===chamado.filial_id?'selected':''}>${f.nome}</option>`).join('')}
-                            </select>
-                            <select name="equipamento_id" class="form-control mb-2" required>
-                                ${equipamentos.map(e => `<option value="${e.id}" ${e.id===chamado.equipamento_id?'selected':''}>${e.modelo}</option>`).join('')}
-                            </select>
-                            <input name="ambiente" class="form-control mb-2" value="${chamado.ambiente}" required>
-                            <input name="tipo_defeito" class="form-control mb-2" value="${chamado.tipo_defeito}" required>
-                            <textarea name="descricao" class="form-control mb-2" placeholder="Descrição/Resolução">${chamado.descricao||''}</textarea>
-                            <button class="btn btn-success">Salvar</button>
-                        </form>
-                        ${chamado.data_hora_resolucao ? `<p><small>Última atualização: ${chamado.data_hora_resolucao}</small></p>` : ''}
-                    </div>
-                `));
-            });
-        });
-    });
-});
-
-// Atualizar chamado
-app.post("/chamados/editar/:id", auth, (req, res) => {
-    const { filial_id, equipamento_id, ambiente, tipo_defeito, descricao } = req.body;
-    const data_hora_resolucao = new Date().toLocaleString();
-    db.run(`UPDATE chamados SET filial_id=?, equipamento_id=?, ambiente=?, tipo_defeito=?, descricao=?, data_hora_resolucao=? WHERE id=?`,
-        [filial_id, equipamento_id, ambiente, tipo_defeito, descricao, data_hora_resolucao, req.params.id],
-        function(err){
-            if(err) return res.send("Erro ao atualizar chamado: " + err.message);
-            res.redirect("/chamados");
-        });
-});
-
-// Excluir chamado
-app.get("/chamados/excluir/:id", auth, (req, res) => {
-    db.run("DELETE FROM chamados WHERE id=?", [req.params.id], function(err){
-        if(err) return res.send("Erro ao excluir chamado: " + err.message);
-        res.redirect("/chamados");
-    });
-});
-
 
 // ===================
-// Dados do relatório filtrado
+// DADOS DO RELATÓRIO
 // ===================
 app.get("/relatorio/dados", auth, (req, res) => {
-    let sql = `SELECT e.*, f.nome as filial_nome, c.nome as cliente_nome
-               FROM equipamentos e
-               LEFT JOIN filiais f ON e.filial_id=f.id
-               LEFT JOIN clientes c ON f.cliente_id=c.id WHERE 1=1`;
-    const params = [];
-    if (req.query.cliente_id) { sql += " AND c.id=?"; params.push(req.query.cliente_id); }
-    if (req.query.filial_id) { sql += " AND f.id=?"; params.push(req.query.filial_id); }
 
-    db.all(sql, params, (err, rows) => {
-        if (err) return res.send("Erro ao gerar relatório");
-        let html = `<table class="table table-bordered">
-                        <tr>
-                            <th>ID</th><th>Modelo</th><th>Tipo</th><th>Marca</th>
-                            <th>Filial</th><th>Cliente</th><th>Responsável</th><th>Executor</th>
-                            <th>Última</th><th>Próxima</th>
-                        </tr>
-                        ${rows.map(r => `<tr>
-                            <td>${r.id}</td><td>${r.modelo}</td><td>${r.tipo}</td><td>${r.marca}</td>
-                            <td>${r.filial_nome||'-'}</td><td>${r.cliente_nome||'-'}</td>
-                            <td>${r.responsavel||'-'}</td><td>${r.executor||'-'}</td>
-                            <td>${r.ultima||'-'}</td><td>${r.proxima||'-'}</td>
-                        </tr>`).join('')}
-                    </table>`;
+    let sql = `
+        SELECT e.*, f.nome as filial_nome, c.nome as cliente_nome
+        FROM equipamentos e
+        LEFT JOIN filiais f ON e.filial_id=f.id
+        LEFT JOIN clientes c ON f.cliente_id=c.id
+        WHERE 1=1
+    `;
+
+    const params = [];
+
+    if(req.query.cliente_id){
+        sql += " AND c.id=?";
+        params.push(req.query.cliente_id);
+    }
+
+    if(req.query.filial_id){
+        sql += " AND f.id=?";
+        params.push(req.query.filial_id);
+    }
+
+    db.all(sql, params, (err, rows)=>{
+
+        if(err) return res.send("Erro ao gerar relatório");
+
+        let html = `
+        <table class="table table-bordered">
+            <tr>
+                <th>ID</th>
+                <th>Ambiente</th>
+                <th>Tipo</th>
+                <th>Marca</th>
+                <th>Idade</th>
+                <th>Filial</th>
+                <th>Cliente</th>
+                <th>Responsável</th>
+                <th>Última</th>
+                <th>Próxima</th>
+            </tr>
+
+            ${rows.map(r=>`
+                <tr>
+                    <td>${r.id}</td>
+                    <td>${r.ambiente}</td>
+                    <td>${r.tipo}</td>
+                    <td>${r.marca}</td>
+                    <td>${r.idade || "-"}</td>
+                    <td>${r.filial_nome || "-"}</td>
+                    <td>${r.cliente_nome || "-"}</td>
+                    <td>${r.responsavel || "-"}</td>
+                    <td>${r.ultima || "-"}</td>
+                    <td>${r.proxima || "-"}</td>
+                </tr>
+            `).join("")}
+        </table>
+        `;
+
         res.send(html);
     });
 });
 
-//======= ROTA MANUTENCAO======
+
+// ===================
+// NOVA MANUTENÇÃO
+// ===================
 app.get("/equipamentos/manutencao/:id", auth, (req,res)=>{
+
     res.send(layout("Nova Manutenção",`
         <div class="card">
             <h3>Registrar Manutenção</h3>
+
             <form method="POST">
-                <input name="tipo" class="form-control mb-2" placeholder="Tipo (Preventiva/Corretiva)" required>
-                <textarea name="descricao" class="form-control mb-2" placeholder="O que foi feito"></textarea>
-                <input name="responsavel" class="form-control mb-2" placeholder="Responsável">
-                <input name="executor" class="form-control mb-2" placeholder="Executor">
-                <button class="btn btn-success">Salvar</button>
+
+                <input
+                    name="tipo"
+                    class="form-control mb-2"
+                    placeholder="Tipo (Preventiva/Corretiva)"
+                    required
+                >
+
+                <textarea
+                    name="descricao"
+                    class="form-control mb-2"
+                    placeholder="Descrição"
+                ></textarea>
+
+                <input
+                    name="responsavel"
+                    class="form-control mb-2"
+                    placeholder="Responsável"
+                >
+
+                <button class="btn btn-success">
+                    Salvar
+                </button>
+
             </form>
         </div>
     `));
 });
 
+
 app.post("/equipamentos/manutencao/:id", auth, (req,res)=>{
 
-    const { tipo, descricao, responsavel, executor } = req.body;
+    const {
+        tipo,
+        descricao,
+        responsavel
+    } = req.body;
 
-    const dataAtual = new Date();
+    const hoje = new Date();
 
-    function formatDate(date){
-        return date.toISOString().split("T")[0];
-    }
+    const ultima = hoje.toISOString().split("T")[0];
 
-    const dataFormatada = dataAtual.toISOString();
+    const proximaDate = new Date();
+    proximaDate.setDate(proximaDate.getDate() + 30);
 
-    const proxima = new Date(dataAtual);
-    proxima.setDate(proxima.getDate() + 30);
+    const proxima = proximaDate.toISOString().split("T")[0];
 
-    // 1️⃣ salva histórico
+    // salva histórico
     db.run(`
         INSERT INTO manutencoes
-        (equipamento_id,data,tipo,descricao,responsavel,executor)
-        VALUES(?,?,?,?,?,?)
+        (
+            equipamento_id,
+            data,
+            tipo,
+            descricao,
+            responsavel
+        )
+        VALUES(?,?,?,?,?)
     `,
     [
         req.params.id,
-        dataFormatada,
+        ultima,
         tipo,
         descricao,
-        responsavel,
-        executor
+        responsavel
     ],
     (err)=>{
+
         if(err) return res.send(err.message);
 
-        // 2️⃣ atualiza equipamento
+        // atualiza equipamento
         db.run(`
             UPDATE equipamentos
-            SET ultima=?, proxima=?, 
-                responsavel=COALESCE(?,responsavel),
-                executor=COALESCE(?,executor)
+            SET
+                ultima=?,
+                proxima=?,
+                responsavel=?
             WHERE id=?
         `,
         [
-            formatDate(dataAtual),
-            formatDate(proxima),
+            ultima,
+            proxima,
             responsavel,
-            executor,
             req.params.id
         ],
         (err2)=>{
+
             if(err2) return res.send(err2.message);
 
             res.redirect("/equipamentos");
@@ -974,13 +1273,15 @@ app.post("/equipamentos/manutencao/:id", auth, (req,res)=>{
 });
 
 
+// ===================
+// HISTÓRICO
+// ===================
 app.get("/equipamentos/historico/:id", auth, (req,res)=>{
 
     const equipamentoId = req.params.id;
 
-    // 🔧 MANUTENÇÕES
     db.all(`
-        SELECT 
+        SELECT
             id,
             data as data_evento,
             tipo,
@@ -989,13 +1290,14 @@ app.get("/equipamentos/historico/:id", auth, (req,res)=>{
             'manutencao' as origem
         FROM manutencoes
         WHERE equipamento_id=?
-    `,[equipamentoId],(err, manutencoes)=>{
+    `,
+    [equipamentoId],
+    (err, manutencoes)=>{
 
         if(err) return res.send(err.message);
 
-        // 📞 CHAMADOS
         db.all(`
-            SELECT 
+            SELECT
                 id,
                 data_hora_chamado as data_evento,
                 tipo_defeito as tipo,
@@ -1004,22 +1306,27 @@ app.get("/equipamentos/historico/:id", auth, (req,res)=>{
                 'chamado' as origem
             FROM chamados
             WHERE equipamento_id=?
-        `,[equipamentoId],(err2, chamados)=>{
+        `,
+        [equipamentoId],
+        (err2, chamados)=>{
 
             if(err2) return res.send(err2.message);
 
-            // 🔥 JUNTA TUDO
-            const historico = [...manutencoes, ...chamados];
+            const historico = [
+                ...manutencoes,
+                ...chamados
+            ];
 
-            // 🔽 ORDENA POR DATA (mais recente primeiro)
             historico.sort((a,b)=>{
-                return new Date(b.data_evento) - new Date(a.data_evento);
+                return new Date(b.data_evento)
+                    - new Date(a.data_evento);
             });
 
             let html = `
             <div class="card">
                 <h3>Histórico Completo</h3>
-                <table class="table">
+
+                <table class="table table-bordered">
                     <tr>
                         <th>Data</th>
                         <th>Origem</th>
@@ -1029,26 +1336,40 @@ app.get("/equipamentos/historico/:id", auth, (req,res)=>{
                     </tr>
 
                     ${historico.map(h=>`
-                        <tr style="background:${h.origem==='chamado' ? '#ffecec' : '#e8f5e9'};">
-                            <td>${h.data_evento || '-'}</td>
+                        <tr
+                            style="
+                            background:
+                            ${h.origem === "chamado"
+                                ? "#ffecec"
+                                : "#e8f5e9"};
+                            "
+                        >
+                            <td>${h.data_evento || "-"}</td>
+
                             <td>
-                                ${h.origem==='chamado' 
-                                    ? '<span class="badge bg-danger">Chamado</span>' 
-                                    : '<span class="badge bg-success">Manutenção</span>'}
+                                ${
+                                    h.origem === "chamado"
+                                    ? '<span class="badge bg-danger">Chamado</span>'
+                                    : '<span class="badge bg-success">Manutenção</span>'
+                                }
                             </td>
-                            <td>${h.tipo || '-'}</td>
-                            <td>${h.descricao || '-'}</td>
-                            <td>${h.responsavel || '-'}</td>
+
+                            <td>${h.tipo || "-"}</td>
+
+                            <td>${h.descricao || "-"}</td>
+
+                            <td>${h.responsavel || "-"}</td>
                         </tr>
                     `).join("")}
                 </table>
             </div>
             `;
 
-            res.send(layout("Histórico",html));
+            res.send(layout("Histórico", html));
         });
     });
 });
+
 
 app.get("/relatorio-chamados", auth, (req, res) => {
     db.all("SELECT * FROM filiais", [], (err, filiais) => {
@@ -1117,7 +1438,7 @@ app.get("/relatorio-chamados", auth, (req, res) => {
 app.get("/relatorio-chamados/dados", auth, (req, res) => {
 
     let sql = `
-        SELECT ch.*, f.nome as filial_nome, e.modelo as equipamento_modelo
+        SELECT ch.*, f.nome as filial_nome, e.ambiente as equipamento_ambiente
         FROM chamados ch
         LEFT JOIN filiais f ON ch.filial_id = f.id
         LEFT JOIN equipamentos e ON ch.equipamento_id = e.id
@@ -1165,7 +1486,7 @@ app.get("/relatorio-chamados/dados", auth, (req, res) => {
                 <tr>
                     <td>${r.id}</td>
                     <td>${r.filial_nome || '-'}</td>
-                    <td>${r.equipamento_modelo || '-'}</td>
+                    <td>${r.equipamento_ambiente || '-'}</td>
                     <td>${r.ambiente || '-'}</td>
                     <td>${r.tipo_defeito || '-'}</td>
                     <td>${r.data_hora_chamado || '-'}</td>
@@ -1177,6 +1498,162 @@ app.get("/relatorio-chamados/dados", auth, (req, res) => {
         `;
 
         res.send(html);
+    });
+});
+
+app.get("/chamados", auth, (req, res) => {
+    db.all(`
+        SELECT ch.*, f.nome as filial_nome, e.ambiente as equipamento_ambiente
+        FROM chamados ch
+        LEFT JOIN filiais f ON ch.filial_id=f.id
+        LEFT JOIN equipamentos e ON ch.equipamento_id=e.id
+        ORDER BY ch.data_hora_chamado DESC
+    `, [], (err, rows) => {
+        if(err) return res.send("Erro ao carregar chamados: " + err.message);
+
+        let html = `
+        <div class="card">
+            <h3>Chamados</h3>
+            <a href="/chamados/novo" class="btn btn-success mb-2">Novo Chamado</a>
+
+            <table class="table table-bordered">
+                <tr>
+                    <th>ID</th>
+                    <th>Filial</th>
+                    <th>Equipamento</th>
+                    <th>Ambiente</th>
+                    <th>Defeito</th>
+                    <th>Data</th>
+                    <th>Ações</th>
+                </tr>
+
+                ${rows.map(r => `
+                    <tr>
+                        <td>${r.id}</td>
+                        <td>${r.filial_nome || "-"}</td>
+                        <td>${r.equipamento_ambiente || "-"}</td>
+                        <td>${r.ambiente || "-"}</td>
+                        <td>${r.tipo_defeito || "-"}</td>
+                        <td>${r.data_hora_chamado || "-"}</td>
+                        <td>
+                            <a href="/chamados/editar/${r.id}" class="btn btn-sm btn-primary">Editar</a>
+                            <a href="/chamados/excluir/${r.id}" class="btn btn-sm btn-danger">Excluir</a>
+                        </td>
+                    </tr>
+                `).join("")}
+            </table>
+        </div>
+        `;
+
+        res.send(layout("Chamados", html));
+    });
+});
+
+// ===================
+// NOVO CHAMADO
+// ===================
+app.get("/chamados/novo", auth, (req, res) => {
+
+    db.all("SELECT * FROM filiais", [], (err, filiais) => {
+
+        if(err) return res.send("Erro ao carregar filiais");
+
+        db.all("SELECT * FROM equipamentos", [], (err2, equipamentos) => {
+
+            if(err2) return res.send("Erro ao carregar equipamentos");
+
+            res.send(layout("Novo Chamado", `
+                <div class="card">
+                    <h3>Novo Chamado</h3>
+
+                    <form method="POST">
+
+                        <select name="filial_id" class="form-control mb-2" required>
+                            <option value="">Selecione a filial</option>
+                            ${filiais.map(f => `
+                                <option value="${f.id}">
+                                    ${f.nome}
+                                </option>
+                            `).join("")}
+                        </select>
+
+                        <select name="equipamento_id" class="form-control mb-2" required>
+                            <option value="">Selecione o equipamento</option>
+                            ${equipamentos.map(e => `
+                                <option value="${e.id}">
+                                    ${e.ambiente}
+                                </option>
+                            `).join("")}
+                        </select>
+
+                        <input
+                            name="ambiente"
+                            class="form-control mb-2"
+                            placeholder="Ambiente"
+                            required
+                        >
+
+                        <input
+                            name="tipo_defeito"
+                            class="form-control mb-2"
+                            placeholder="Tipo do defeito"
+                            required
+                        >
+
+                        <button class="btn btn-success">
+                            Salvar
+                        </button>
+
+                    </form>
+                </div>
+            `));
+        });
+    });
+});
+
+
+// ===================
+// SALVAR NOVO CHAMADO
+// ===================
+app.post("/chamados/novo", auth, (req, res) => {
+
+    const {
+        filial_id,
+        equipamento_id,
+        ambiente,
+        tipo_defeito
+    } = req.body;
+
+    const data_hora_chamado =
+        new Date().toLocaleString();
+
+    db.run(`
+        INSERT INTO chamados
+        (
+            filial_id,
+            equipamento_id,
+            ambiente,
+            tipo_defeito,
+            data_hora_chamado
+        )
+        VALUES(?,?,?,?,?)
+    `,
+    [
+        filial_id,
+        equipamento_id,
+        ambiente,
+        tipo_defeito,
+        data_hora_chamado
+    ],
+    (err)=>{
+
+        if(err){
+            return res.send(
+                "Erro ao salvar: " + err.message
+            );
+        }
+
+        res.redirect("/chamados");
     });
 });
 // ===================
